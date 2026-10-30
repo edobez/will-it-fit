@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Garage fit simulator v2</title>
+<title>Garage fit simulator v3</title>
 <style>
   :root {
     --bg: #f4f2ee; --panel: #ffffff; --ink: #1d2128; --muted: #6b7280; --line: #e3e0da;
@@ -12,25 +12,26 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
     font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
-  #app { display: grid; grid-template-columns: 300px 1fr; height: 100%; }
+  #app { display: grid; grid-template-columns: 310px 1fr; height: 100%; }
   #panel { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 14px 14px 40px; }
   #panel h1 { font-size: 16px; margin: 0 0 2px; }
   #panel .sub { color: var(--muted); margin-bottom: 10px; }
   #panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 6px; }
-  .row { display: grid; grid-template-columns: 1fr 78px 28px; align-items: center; gap: 6px; margin: 3px 0; }
+  .row { display: grid; grid-template-columns: 1fr 78px 30px; align-items: center; gap: 6px; margin: 3px 0; }
+  .row.sel { grid-template-columns: 1fr 160px; }
   .row label { font-size: 12.5px; }
   .row input[type=number] { width: 100%; padding: 4px 5px; border: 1px solid var(--line); border-radius: 5px; font: inherit; text-align: right; }
   .row .u { color: var(--muted); font-size: 11.5px; }
+  select { font: inherit; padding: 4px; border: 1px solid var(--line); border-radius: 5px; width: 100%; background: #fff; }
   .chk { display: flex; align-items: center; gap: 7px; margin: 5px 0; font-size: 12.5px; }
   .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   button { font: inherit; padding: 6px 10px; border: 1px solid var(--line); background: #fafaf8; border-radius: 6px; cursor: pointer; color: var(--ink); }
   button:hover { background: #f0eee9; }
-  .warnbox { color: var(--bad); font-size: 12px; margin-top: 4px; min-height: 0; }
-  .keys { font-size: 12px; color: var(--muted); }
-  .keys kbd { display: inline-block; min-width: 18px; padding: 0 4px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: #fafaf8; color: var(--ink); font: 11px ui-monospace, monospace; text-align: center; }
-  .keys div { margin: 3px 0; }
-  #stage { position: relative; overflow: hidden; }
-  #stage { display: flex; flex-direction: row; }
+  .warnbox { color: var(--bad); font-size: 12px; margin-top: 4px; }
+  .note { font-size: 12px; color: var(--muted); }
+  .note kbd { display: inline-block; min-width: 18px; padding: 0 4px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: #fafaf8; color: var(--ink); font: 11px ui-monospace, monospace; text-align: center; }
+  .note div { margin: 3px 0; }
+  #stage { position: relative; overflow: hidden; display: flex; flex-direction: row; }
   .pane { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; }
   .pane + .pane { border-left: 2px solid #22252a; }
   .pane canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
@@ -38,32 +39,31 @@
   .ptitle { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); background: rgba(29,33,40,.78); color: #fff;
     font-size: 11px; padding: 2px 9px; border-radius: 10px; pointer-events: none; white-space: nowrap; }
   #paneTop .ptitle { left: auto; right: 10px; transform: none; }
-  @media (max-width: 820px) { #toggle { top: auto !important; bottom: 12px; left: 10px; right: auto !important; } }
-  select { font: inherit; padding: 4px; border: 1px solid var(--line); border-radius: 5px; }
-  @media (max-aspect-ratio: 1/1) {
-    #stage { flex-direction: column; }
-    .pane + .pane { border-left: 0; border-top: 2px solid #22252a; }
-  }
   #hud { position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,.93); border: 1px solid var(--line); border-radius: 8px;
-    padding: 8px 10px; font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace; pointer-events: none; min-width: 250px; }
+    padding: 8px 10px; font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace; pointer-events: none; min-width: 260px; z-index: 2; }
   #hud .k { color: var(--muted); }
   #hud .bad { color: var(--bad); font-weight: 600; }
   #hud .good { color: var(--good); font-weight: 600; }
   #hud .warn { color: var(--warn); font-weight: 600; }
   #legend { position: absolute; bottom: 10px; left: 10px; background: rgba(255,255,255,.93); border: 1px solid var(--line); border-radius: 8px;
-    padding: 6px 10px; font-size: 11.5px; pointer-events: none; display: flex; gap: 12px; flex-wrap: wrap; }
+    padding: 6px 10px; font-size: 11.5px; pointer-events: none; display: flex; gap: 12px; flex-wrap: wrap; max-width: 46%; z-index: 2; }
   #legend span::before { content: ""; display: inline-block; width: 14px; height: 3px; margin-right: 5px; vertical-align: middle; background: var(--c); }
-  #pad { position: absolute; right: 12px; bottom: 12px; display: grid; grid-template-columns: repeat(3, 56px); grid-template-rows: repeat(2, 56px); gap: 6px; }
+  #legend span.sq::before { height: 10px; }
+  #pad { position: absolute; right: 12px; bottom: 12px; display: grid; grid-template-columns: repeat(3, 56px); grid-template-rows: repeat(2, 56px); gap: 6px; z-index: 2; }
   #pad button { font-size: 20px; padding: 0; background: rgba(255,255,255,.92); user-select: none; -webkit-user-select: none; touch-action: none; }
   #pad button.on { background: #dfe9f5; border-color: var(--accent); }
   #pad .fine { font-size: 11px; }
-  #toggle { display: none; position: absolute; top: 10px; right: 10px; z-index: 5; background: rgba(255,255,255,.95); }
+  #toggle { display: none; position: absolute; bottom: 12px; left: 10px; z-index: 5; background: rgba(255,255,255,.95); }
+  @media (max-aspect-ratio: 1/1) {
+    #stage { flex-direction: column; }
+    .pane + .pane { border-left: 0; border-top: 2px solid #22252a; }
+  }
   @media (max-width: 820px) {
     #app { grid-template-columns: 1fr; }
-    #panel { position: absolute; z-index: 10; top: 0; left: 0; bottom: 0; width: min(330px, 90vw); transform: translateX(-102%); transition: transform .2s; box-shadow: 0 0 30px rgba(0,0,0,.2); }
+    #panel { position: absolute; z-index: 10; top: 0; left: 0; bottom: 0; width: min(340px, 90vw); transform: translateX(-102%); transition: transform .2s; box-shadow: 0 0 30px rgba(0,0,0,.2); }
     #panel.open { transform: none; }
     #toggle { display: block; }
-    #hud { font-size: 11px; min-width: 0; max-width: calc(100vw - 110px); }
+    #hud { font-size: 11px; min-width: 0; max-width: calc(100vw - 120px); }
     #legend { display: none; }
   }
 </style>
@@ -72,36 +72,56 @@
 <div id="app">
   <aside id="panel">
     <h1>Garage fit simulator</h1>
-    <div class="sub">v2 · top view and driver view side by side</div>
-    <div id="fields"></div>
+    <div class="sub">v3 · scenarios, projection modes, reachability</div>
+
+    <h2>Scenario</h2>
+    <div class="row sel"><label for="scenario">Scenario</label><select id="scenario"></select></div>
+    <div id="scnFields"></div>
+
+    <h2>Car</h2>
+    <label class="chk"><input type="checkbox" id="mirrorsFolded"> Mirrors folded</label>
+    <div id="carFields"></div>
     <div class="warnbox" id="warn"></div>
-    <h2>View</h2>
-    <div class="row" style="grid-template-columns: 1fr 150px;"><label for="viewMode">Views</label>
-      <select id="viewMode"><option value="both">Both</option><option value="top">Top view only</option><option value="driver">Driver view only</option></select></div>
+
+    <h2>Projection</h2>
+    <div class="row sel"><label for="projMode">When a projection hits something</label>
+      <select id="projMode"><option value="stop">Stop at first contact</option><option value="pass">Pass through, mark overlap</option></select></div>
+    <div id="simFields"></div>
     <label class="chk"><input type="checkbox" id="showCorners"> Show corner paths</label>
     <label class="chk"><input type="checkbox" id="showMirrorPaths"> Show mirror tip paths</label>
-    <label class="chk"><input type="checkbox" id="follow"> Camera follows car</label>
+
+    <h2>Reachability heatmap</h2>
+    <div class="row sel"><label for="reachMode">Show where the car can get</label>
+      <select id="reachMode"><option value="off">Off</option><option value="fwd">Forward only</option><option value="rev">Reverse only</option></select></div>
+    <div id="reachFields"></div>
+    <div class="note">Every position the car's center can reach in one move without changing direction, with any steering along the way. Color shows the distance driven. Recomputed whenever the car stops.</div>
+
+    <h2>View</h2>
+    <div class="row sel"><label for="viewMode">Views</label>
+      <select id="viewMode"><option value="both">Both</option><option value="top">Top view only</option><option value="driver">Driver view only</option></select></div>
+    <label class="chk"><input type="checkbox" id="follow"> Top view follows car</label>
     <div class="btns">
       <button id="bReset">Reset car</button>
       <button id="bTrail">Clear trail</button>
-      <button id="bFit">Fit view</button>
+      <button id="bFit">Fit views</button>
       <button id="bDefaults">Restore defaults</button>
     </div>
+
     <h2>Controls</h2>
-    <div class="keys">
+    <div class="note">
       <div><kbd>↑</kbd> <kbd>↓</kbd> drive forward / reverse (hold)</div>
       <div><kbd>←</kbd> <kbd>→</kbd> turn the wheel (it stays where you leave it)</div>
       <div><kbd>Shift</kbd> hold for fine control (25%)</div>
       <div><kbd>C</kbd> center wheel · <kbd>R</kbd> reset car · <kbd>F</kbd> fit views</div>
-      <div><kbd>V</kbd> cycle views: both, top only, driver only</div>
-      <div><kbd>Q</kbd> <kbd>E</kbd> rotate car in place (placement only, not physical)</div>
-      <div>Top view: drag the car to place it, drag elsewhere to pan, scroll or pinch to zoom.</div>
-      <div>Driver view: scroll or pinch to zoom. The blue "G" compass points towards the garage wall.</div>
+      <div><kbd>V</kbd> cycle views · <kbd>P</kbd> toggle projection mode · <kbd>H</kbd> cycle heatmap</div>
+      <div><kbd>Q</kbd> <kbd>E</kbd> rotate car in place (placement only)</div>
+      <div>Top view: drag the car to place it, drag elsewhere to pan, scroll or pinch to zoom. Driver view: scroll or pinch to zoom; the blue "T" compass points along the target direction of the scene.</div>
     </div>
     <h2>Model notes</h2>
-    <div class="keys">
+    <div class="note">
       Kinematic bicycle model around the rear axle, no tire slip, walking speed. Max wheel angle is derived from the curb to curb turning circle and track width.
-      Height (ceiling, ramps) is ignored. "Door can close" means the whole car, mirrors included, is behind the inner face of the door wall.
+      Height is ignored, so curbs count as walls even though a bumper could overhang a low one.
+      The heatmap search uses a 0.15 m by 3° lattice with 0.5 m steps and five steering levels, so very tight gaps can be missed by a few centimetres.
     </div>
   </aside>
   <main id="stage">
@@ -111,8 +131,9 @@
     <div id="legend">
       <span style="--c:#1f9d6b">forward projection</span>
       <span style="--c:#c7781a">reverse projection</span>
-      <span style="--c:#cf3f3f">first contact</span>
-      <span style="--c:rgba(60,60,60,.45)">driven trail</span>
+      <span style="--c:#cf3f3f">contact / overlap</span>
+      <span style="--c:#8e44ad">path into the space</span>
+      <span class="sq" style="--c:linear-gradient(90deg,#0b7a75,#7fb7e6)">reachable (near to far)</span>
     </div>
     <button id="toggle">Settings</button>
     <div id="pad">
@@ -132,74 +153,176 @@
 const DEG = Math.PI / 180;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-// ---------- parameters ----------
-const SCHEMA = [
-  { g: "Car", k: "carLength", label: "Length", unit: "m", v: 4.43, step: 0.01 },
-  { g: "Car", k: "carWidth", label: "Width (body, no mirrors)", unit: "m", v: 1.86, step: 0.01 },
-  { g: "Car", k: "mirrorWidth", label: "Width with mirrors", unit: "m", v: 2.03, step: 0.01 },
-  { g: "Car", k: "mirrorFromFront", label: "Mirrors, distance from front", unit: "m", v: 1.85, step: 0.01 },
-  { g: "Car", k: "wheelbase", label: "Wheelbase", unit: "m", v: 2.70, step: 0.01 },
-  { g: "Car", k: "frontOverhang", label: "Front overhang", unit: "m", v: 0.90, step: 0.01 },
-  { g: "Car", k: "track", label: "Track width", unit: "m", v: 1.60, step: 0.01 },
-  { g: "Car", k: "turningCircle", label: "Turning circle, curb to curb", unit: "m", v: 11.4, step: 0.1 },
-  { g: "Tunnel and garage", k: "tunnelWidth", label: "Tunnel width", unit: "m", v: 5.5, step: 0.05 },
-  { g: "Tunnel and garage", k: "tunnelLength", label: "Tunnel length shown", unit: "m", v: 30, step: 1 },
-  { g: "Tunnel and garage", k: "wallThickness", label: "Wall thickness at door", unit: "m", v: 0.25, step: 0.01 },
-  { g: "Tunnel and garage", k: "garageX", label: "Garage position along tunnel", unit: "m", v: 15, step: 0.1 },
-  { g: "Tunnel and garage", k: "garageWidth", label: "Garage inner width", unit: "m", v: 2.7, step: 0.01 },
-  { g: "Tunnel and garage", k: "garageDepth", label: "Garage inner depth", unit: "m", v: 5.5, step: 0.01 },
-  { g: "Tunnel and garage", k: "doorWidth", label: "Door opening width", unit: "m", v: 2.4, step: 0.01 },
-  { g: "Tunnel and garage", k: "doorOffset", label: "Door offset from left inner wall", unit: "m", v: 0.15, step: 0.01 },
-  { g: "Simulation", k: "speed", label: "Driving speed", unit: "m/s", v: 0.8, step: 0.1 },
-  { g: "Simulation", k: "steerRate", label: "Steering rate (wheel angle)", unit: "°/s", v: 30, step: 1 },
-  { g: "Simulation", k: "projLen", label: "Projection length", unit: "m", v: 6, step: 0.5 },
+// =====================================================================
+// Parameters
+// =====================================================================
+const CAR_SCHEMA = [
+  { k: "carLength", label: "Length", unit: "m", v: 4.43, step: 0.01 },
+  { k: "carWidth", label: "Width (body, no mirrors)", unit: "m", v: 1.86, step: 0.01 },
+  { k: "mirrorWidth", label: "Width with mirrors", unit: "m", v: 2.03, step: 0.01 },
+  { k: "mirrorFromFront", label: "Mirrors, distance from front", unit: "m", v: 1.85, step: 0.01 },
+  { k: "wheelbase", label: "Wheelbase", unit: "m", v: 2.70, step: 0.01 },
+  { k: "frontOverhang", label: "Front overhang", unit: "m", v: 0.90, step: 0.01 },
+  { k: "track", label: "Track width", unit: "m", v: 1.60, step: 0.01 },
+  { k: "turningCircle", label: "Turning circle, curb to curb", unit: "m", v: 11.4, step: 0.1 },
 ];
-const CHECKS = { mirrorsFolded: false, showCorners: true, showMirrorPaths: false, follow: false };
-const OTHER_DEFAULTS = { viewMode: "both" };
-const STORE_KEY = "garageSim.v2";
+const SIM_SCHEMA = [
+  { k: "speed", label: "Driving speed", unit: "m/s", v: 0.8, step: 0.1 },
+  { k: "steerRate", label: "Steering rate (wheel angle)", unit: "°/s", v: 30, step: 1 },
+  { k: "projLen", label: "Projection length", unit: "m", v: 6, step: 0.5 },
+];
+const REACH_SCHEMA = [
+  { k: "reachHorizon", label: "Max distance driven", unit: "m", v: 14, step: 1 },
+];
+const GLOBAL_DEFAULTS = {
+  mirrorsFolded: false, showCorners: true, showMirrorPaths: false, follow: false,
+  viewMode: "both", projMode: "pass", reachMode: "off", scenario: "garage",
+};
 
-const P = {};
-function setDefaults() { SCHEMA.forEach(s => P[s.k] = s.v); Object.assign(P, CHECKS, OTHER_DEFAULTS); }
+const PARKED = [
+  { k: "parkedLength", label: "Parked car length", unit: "m", v: 4.6, step: 0.05 },
+  { k: "parkedWidth", label: "Parked car width", unit: "m", v: 1.85, step: 0.01 },
+];
+const SCENARIOS = {
+  garage: {
+    name: "Garage off a tunnel",
+    schema: [
+      { k: "tunnelWidth", label: "Tunnel width", unit: "m", v: 5.5, step: 0.05 },
+      { k: "tunnelLength", label: "Tunnel length shown", unit: "m", v: 30, step: 1 },
+      { k: "wallThickness", label: "Wall thickness at door", unit: "m", v: 0.25, step: 0.01 },
+      { k: "garageX", label: "Garage position along tunnel", unit: "m", v: 15, step: 0.1 },
+      { k: "garageWidth", label: "Garage inner width", unit: "m", v: 2.7, step: 0.01 },
+      { k: "garageDepth", label: "Garage inner depth", unit: "m", v: 5.5, step: 0.01 },
+      { k: "doorWidth", label: "Door opening width", unit: "m", v: 2.4, step: 0.01 },
+      { k: "doorOffset", label: "Door offset from left inner wall", unit: "m", v: 0.15, step: 0.01 },
+    ],
+    build: buildGarage,
+  },
+  parallelStreet: {
+    name: "Parallel parking, street",
+    schema: [
+      { k: "roadWidth", label: "Driving width of the road", unit: "m", v: 6.0, step: 0.05 },
+      { k: "slotLength", label: "Gap between parked cars", unit: "m", v: 6.0, step: 0.05 },
+      { k: "slotDepth", label: "Parking lane width", unit: "m", v: 2.1, step: 0.05 },
+      { k: "curbGap", label: "Parked cars' distance from curb", unit: "m", v: 0.2, step: 0.05 },
+      ...PARKED,
+    ],
+    build: buildParallelStreet,
+  },
+  parallelUnderground: {
+    name: "Parallel parking, underground",
+    schema: [
+      { k: "aisleWidth", label: "Aisle width", unit: "m", v: 3.5, step: 0.05 },
+      { k: "slotLength", label: "Slot length", unit: "m", v: 5.6, step: 0.05 },
+      { k: "slotDepth", label: "Slot depth", unit: "m", v: 2.3, step: 0.05 },
+      { k: "pillarSize", label: "Pillar size at slot ends (0 = none)", unit: "m", v: 0.5, step: 0.05 },
+      { k: "neighborCars", label: "Cars in neighboring slots", type: "bool", v: true },
+      ...PARKED,
+    ],
+    build: buildParallelUnderground,
+  },
+  bays90: {
+    name: "Perpendicular bays (90°)",
+    schema: [
+      { k: "angle", label: "Bay angle to aisle", unit: "°", v: 90, step: 1 },
+      { k: "aisleWidth", label: "Aisle width", unit: "m", v: 6.0, step: 0.05 },
+      { k: "bayWidth", label: "Bay width", unit: "m", v: 2.5, step: 0.01 },
+      { k: "bayDepth", label: "Bay depth (perpendicular to aisle)", unit: "m", v: 5.0, step: 0.05 },
+      { k: "pillarSize", label: "Pillars beside the bay (0 = none)", unit: "m", v: 0, step: 0.05 },
+      { k: "pillarInset", label: "Pillar distance from aisle", unit: "m", v: 0.8, step: 0.05 },
+      { k: "neighborCars", label: "Cars in neighboring bays", type: "bool", v: true },
+      ...PARKED,
+    ],
+    build: buildBays,
+  },
+  bays45: {
+    name: "Angled bays (45°)",
+    schema: [
+      { k: "angle", label: "Bay angle to aisle", unit: "°", v: 45, step: 1 },
+      { k: "aisleWidth", label: "Aisle width", unit: "m", v: 3.8, step: 0.05 },
+      { k: "bayWidth", label: "Bay width", unit: "m", v: 2.5, step: 0.01 },
+      { k: "bayDepth", label: "Bay depth (perpendicular to aisle)", unit: "m", v: 5.0, step: 0.05 },
+      { k: "pillarSize", label: "Pillars beside the bay (0 = none)", unit: "m", v: 0, step: 0.05 },
+      { k: "pillarInset", label: "Pillar distance from aisle", unit: "m", v: 0.8, step: 0.05 },
+      { k: "neighborCars", label: "Cars in neighboring bays", type: "bool", v: true },
+      ...PARKED,
+    ],
+    build: buildBays,
+  },
+};
+
+const STORE_KEY = "garageSim.v3";
+const P = {};   // global params
+const PS = {};  // per scenario params
+function setDefaults() {
+  [...CAR_SCHEMA, ...SIM_SCHEMA, ...REACH_SCHEMA].forEach(s => P[s.k] = s.v);
+  Object.assign(P, GLOBAL_DEFAULTS);
+  for (const id in SCENARIOS) { PS[id] = {}; SCENARIOS[id].schema.forEach(s => PS[id][s.k] = s.v); }
+}
 setDefaults();
-try { const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null"); if (saved) Object.assign(P, saved); } catch (e) {}
-function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(P)); } catch (e) {} }
+try {
+  const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+  if (saved) {
+    Object.assign(P, saved.P || {});
+    for (const id in saved.PS || {}) if (PS[id]) Object.assign(PS[id], saved.PS[id]);
+    if (!SCENARIOS[P.scenario]) P.scenario = "garage";
+  }
+} catch (e) {}
+function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify({ P, PS })); } catch (e) {} }
+const SP = () => PS[P.scenario];
 
-// ---------- build panel ----------
-const fieldsEl = document.getElementById("fields");
-function buildFields() {
-  fieldsEl.innerHTML = "";
-  let group = null;
-  for (const s of SCHEMA) {
-    if (s.g !== group) {
-      group = s.g;
-      const h = document.createElement("h2"); h.textContent = group; fieldsEl.appendChild(h);
-      if (group === "Car") {
-        const l = document.createElement("label"); l.className = "chk";
-        l.innerHTML = '<input type="checkbox" id="mirrorsFolded"> Mirrors folded';
-        fieldsEl.appendChild(l);
-      }
+// =====================================================================
+// Panel
+// =====================================================================
+function buildRows(container, schema, store, onChange) {
+  container.innerHTML = "";
+  for (const s of schema) {
+    if (s.type === "bool") {
+      const l = document.createElement("label"); l.className = "chk";
+      l.innerHTML = `<input type="checkbox"> ${s.label}`;
+      const cb = l.querySelector("input"); cb.checked = !!store[s.k];
+      cb.onchange = () => { store[s.k] = cb.checked; onChange(); };
+      container.appendChild(l);
+      continue;
     }
     const row = document.createElement("div"); row.className = "row";
-    row.innerHTML = `<label for="f_${s.k}">${s.label}</label><input type="number" id="f_${s.k}" step="${s.step}" value="${P[s.k]}"><span class="u">${s.unit}</span>`;
-    fieldsEl.appendChild(row);
+    row.innerHTML = `<label>${s.label}</label><input type="number" step="${s.step}" value="${store[s.k]}"><span class="u">${s.unit}</span>`;
+    container.appendChild(row);
     row.querySelector("input").addEventListener("input", e => {
       const v = parseFloat(e.target.value);
-      if (Number.isFinite(v)) { P[s.k] = v; onParamsChanged(); }
+      if (Number.isFinite(v)) { store[s.k] = v; onChange(); }
     });
   }
-  for (const k of Object.keys(CHECKS)) {
-    const el = document.getElementById(k);
-    el.checked = !!P[k];
+}
+const scnSel = document.getElementById("scenario");
+for (const id in SCENARIOS) { const o = document.createElement("option"); o.value = id; o.textContent = SCENARIOS[id].name; scnSel.appendChild(o); }
+function buildPanel() {
+  scnSel.value = P.scenario;
+  buildRows(document.getElementById("scnFields"), SCENARIOS[P.scenario].schema, SP(), onParamsChanged);
+  buildRows(document.getElementById("carFields"), CAR_SCHEMA, P, onParamsChanged);
+  buildRows(document.getElementById("simFields"), SIM_SCHEMA, P, onParamsChanged);
+  buildRows(document.getElementById("reachFields"), REACH_SCHEMA, P, onParamsChanged);
+  for (const k of ["mirrorsFolded", "showCorners", "showMirrorPaths", "follow"]) {
+    const el = document.getElementById(k); el.checked = !!P[k];
     el.onchange = () => { P[k] = el.checked; onParamsChanged(); };
   }
+  for (const k of ["projMode", "reachMode", "viewMode"]) {
+    const el = document.getElementById(k); el.value = P[k];
+    el.onchange = () => { P[k] = el.value; applyViewMode(); onParamsChanged(); };
+  }
 }
+scnSel.onchange = () => {
+  P.scenario = scnSel.value; buildPanel(); onParamsChanged(); resetCar(); fitView(); fitEgo();
+};
 
-// ---------- derived geometry ----------
+// =====================================================================
+// Car geometry
+// =====================================================================
 const D = {};
 function derive() {
   const warn = [];
   const L = Math.max(1, P.carLength), W = Math.max(0.5, P.carWidth), wb = clamp(P.wheelbase, 0.5, L);
-  let fo = Math.max(0, P.frontOverhang);
+  const fo = Math.max(0, P.frontOverhang);
   let ro = L - wb - fo;
   if (ro < 0.05) { warn.push("Wheelbase plus front overhang exceeds the length; rear overhang forced to 0.05 m."); ro = 0.05; }
   D.wb = wb; D.ro = ro; D.xf = wb + fo; D.w2 = W / 2;
@@ -208,40 +331,12 @@ function derive() {
   D.trackHalf = Math.min(P.track, W) / 2;
   const half = P.turningCircle / 2, s = half * half - wb * wb;
   let dmax = 40 * DEG;
-  if (s > 0) {
-    const Rr = Math.sqrt(s) - D.trackHalf;
-    if (Rr > 0) dmax = Math.atan(wb / Rr);
-  } else warn.push("Turning circle too small for this wheelbase; using 40° max wheel angle.");
+  if (s > 0) { const Rr = Math.sqrt(s) - D.trackHalf; if (Rr > 0) dmax = Math.atan(wb / Rr); }
+  else warn.push("Turning circle too small for this wheelbase; using 40° max wheel angle.");
   D.dmax = clamp(dmax, 10 * DEG, 55 * DEG);
+  D.version = (D.version || 0) + 1;
   document.getElementById("warn").textContent = warn.join(" ");
 }
-
-// ---------- scene ----------
-const S = { walls: [], free: [] };
-const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
-function buildScene() {
-  const L = Math.max(10, P.tunnelLength), Wt = Math.max(1, P.tunnelWidth), t = Math.max(0, P.wallThickness);
-  const gw = Math.max(0.5, P.garageWidth), gd = Math.max(0.5, P.garageDepth);
-  const gx = clamp(P.garageX, 0.5, L - gw - 0.5);
-  const dw = Math.min(Math.max(0.3, P.doorWidth), gw);
-  const doff = clamp(P.doorOffset, 0, gw - dw);
-  const dx0 = gx + doff, dx1 = dx0 + dw, T = 1.5;
-  const gy0 = Wt + t, gy1 = Wt + t + gd;
-  Object.assign(S, { L, Wt, t, gw, gd, gx, dw, dx0, dx1, gy0, gy1 });
-  S.walls = [
-    rect(-T, -T, L + T, 0),
-    rect(-T, 0, 0, Wt),
-    rect(L, 0, L + T, Wt),
-    rect(-T, Wt, dx0, gy0),
-    rect(dx1, Wt, L + T, gy0),
-    rect(gx - T, gy0, gx, gy1 + T),
-    rect(gx + gw, gy0, gx + gw + T, gy1 + T),
-    rect(gx, gy1, gx + gw, gy1 + T),
-  ];
-  S.free = [rect(0, 0, L, Wt), rect(dx0, Wt - 0.001, dx1, gy0 + 0.001), rect(gx, gy0, gx + gw, gy1)];
-}
-
-// ---------- car geometry ----------
 function toWorld(p, lx, ly) {
   const c = Math.cos(p.th), s = Math.sin(p.th);
   return [p.x + c * lx - s * ly, p.y + s * lx + c * ly];
@@ -259,7 +354,179 @@ function partsLocal() {
 function partsWorld(p) { return partsLocal().map(poly => poly.map(([x, y]) => toWorld(p, x, y))); }
 function centerLocal() { return [(D.xf - D.ro) / 2, 0]; }
 
-// ---------- collision ----------
+// =====================================================================
+// Scenes
+// =====================================================================
+const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+function orect(cx, cy, th, len, wid) {
+  const c = Math.cos(th), s = Math.sin(th), l = len / 2, w = wid / 2;
+  return [[-l, -w], [l, -w], [l, w], [-l, w]].map(([x, y]) => [cx + c * x - s * y, cy + s * x + c * y]);
+}
+// Scene: floor (drawn), obstacles [{poly, kind: wall|curb|pillar|car, pose?}], lines (paint), target, labels, bounds, start
+let S = {};
+let sceneVersion = 0;
+
+function parkedCar(cx, cy, th, sp) {
+  return { kind: "car", poly: orect(cx, cy, th, sp.parkedLength, sp.parkedWidth), pose: { x: cx, y: cy, th }, len: sp.parkedLength, wid: sp.parkedWidth };
+}
+
+function buildGarage(sp) {
+  const L = Math.max(10, sp.tunnelLength), Wt = Math.max(1, sp.tunnelWidth), t = Math.max(0, sp.wallThickness);
+  const gw = Math.max(0.5, sp.garageWidth), gd = Math.max(0.5, sp.garageDepth);
+  const gx = clamp(sp.garageX, 0.5, L - gw - 0.5);
+  const dw = Math.min(Math.max(0.3, sp.doorWidth), gw);
+  const doff = clamp(sp.doorOffset, 0, gw - dw);
+  const dx0 = gx + doff, dx1 = dx0 + dw, T = 1.5;
+  const gy0 = Wt + t, gy1 = Wt + t + gd;
+  const wall = poly => ({ kind: "wall", poly });
+  return {
+    floor: [rect(0, 0, L, Wt), rect(dx0, Wt - 0.001, dx1, gy0 + 0.001), rect(gx, gy0, gx + gw, gy1)],
+    obstacles: [
+      wall(rect(-T, -T, L + T, 0)), wall(rect(-T, 0, 0, Wt)), wall(rect(L, 0, L + T, Wt)),
+      wall(rect(-T, Wt, dx0, gy0)), wall(rect(dx1, Wt, L + T, gy0)),
+      wall(rect(gx - T, gy0, gx, gy1 + T)), wall(rect(gx + gw, gy0, gx + gw + T, gy1 + T)), wall(rect(gx, gy1, gx + gw, gy1 + T)),
+    ],
+    lines: [],
+    target: { kind: "garage", poly: rect(gx, gy0, gx + gw, gy1), rect: { x0: gx, y0: gy0, x1: gx + gw, y1: gy1 }, doorLine: [[dx0, gy0], [dx1, gy0]] },
+    labels: [
+      { text: `garage ${gw.toFixed(2)} × ${gd.toFixed(2)} m`, x: gx + gw / 2, y: gy1 - 0.35, color: "#2f6fb3" },
+      { text: `door ${dw.toFixed(2)} m`, x: (dx0 + dx1) / 2, y: gy0 + 0.3, color: "#2f6fb3" },
+      { text: `tunnel ${Wt.toFixed(2)} m`, x: 1.0, y: Wt / 2, align: "left", color: "#6b7280" },
+    ],
+    bounds: [-1, -1, L + 1, gy1 + 1],
+    start: { x: 2 + D.ro, y: Wt * 0.5, th: 0 },
+    targetDir: Math.PI / 2,
+  };
+}
+
+function buildParallelStreet(sp) {
+  const Wa = Math.max(2, sp.roadWidth), dep = Math.max(1.5, sp.slotDepth), S_ = Math.max(2, sp.slotLength);
+  const cl = sp.parkedLength, cw = sp.parkedWidth, L = 40, xs = 18, T = 1.5;
+  const yTop = Wa + dep, cy = Math.max(Wa + cw / 2, yTop - Math.max(0, sp.curbGap) - cw / 2);
+  const obstacles = [
+    { kind: "curb", poly: rect(-T, yTop, L + T, yTop + T) },
+    { kind: "curb", poly: rect(-T, -T, L + T, 0) },
+    { kind: "wall", poly: rect(-T, 0, 0, yTop) }, { kind: "wall", poly: rect(L, 0, L + T, yTop) },
+  ];
+  const gap2 = 1.0;
+  const xsCars = [xs - cl / 2, xs - cl * 1.5 - gap2, xs + S_ + cl / 2, xs + S_ + cl * 1.5 + gap2];
+  xsCars.forEach(x => { if (x - cl / 2 > 0 && x + cl / 2 < L) obstacles.push(parkedCar(x, cy, 0, sp)); });
+  return {
+    floor: [rect(0, 0, L, yTop)],
+    obstacles,
+    lines: [[[0, Wa], [L, Wa]]],
+    target: { kind: "rect", poly: rect(xs, Wa, xs + S_, yTop), rect: { x0: xs, y0: Wa, x1: xs + S_, y1: yTop }, backSide: "y1" },
+    labels: [
+      { text: `gap ${S_.toFixed(2)} m`, x: xs + S_ / 2, y: Wa + dep / 2, color: "#2f6fb3" },
+      { text: `road ${Wa.toFixed(2)} m`, x: 1.0, y: Wa / 2, align: "left", color: "#6b7280" },
+    ],
+    bounds: [-1, -1.5, L + 1, yTop + 1.5],
+    start: { x: 2 + D.ro, y: Math.max(D.w2 + 0.3, Wa - 0.8 - D.w2), th: 0 },
+    targetDir: Math.PI / 2,
+  };
+}
+
+function buildParallelUnderground(sp) {
+  const Wa = Math.max(2, sp.aisleWidth), dep = Math.max(1.5, sp.slotDepth), S_ = Math.max(2, sp.slotLength);
+  const p = Math.max(0, sp.pillarSize), cl = sp.parkedLength, cw = sp.parkedWidth;
+  const L = 40, xs = 18, T = 1.5, yTop = Wa + dep;
+  const obstacles = [
+    { kind: "wall", poly: rect(-T, yTop, L + T, yTop + T) }, { kind: "wall", poly: rect(-T, -T, L + T, 0) },
+    { kind: "wall", poly: rect(-T, 0, 0, yTop) }, { kind: "wall", poly: rect(L, 0, L + T, yTop) },
+  ];
+  const lines = [[[0, Wa], [L, Wa]]];
+  for (let i = -3; i <= 4; i++) {
+    const xb = xs + i * S_;
+    if (xb <= 0 || xb >= L) continue;
+    lines.push([[xb, Wa], [xb, yTop]]);
+    if (p > 0) obstacles.push({ kind: "pillar", poly: rect(xb - p / 2, yTop - p, xb + p / 2, yTop) });
+  }
+  if (sp.neighborCars) {
+    const cy = yTop - Math.min(0.3, Math.max(0.05, dep - cw)) - cw / 2;
+    for (const i of [-2, -1, 1, 2]) {
+      const cx = xs + i * S_ + S_ / 2;
+      if (cx - cl / 2 > 0 && cx + cl / 2 < L) obstacles.push(parkedCar(cx, cy, 0, sp));
+    }
+  }
+  return {
+    floor: [rect(0, 0, L, yTop)],
+    obstacles, lines,
+    target: { kind: "rect", poly: rect(xs, Wa, xs + S_, yTop), rect: { x0: xs, y0: Wa, x1: xs + S_, y1: yTop }, backSide: "y1" },
+    labels: [
+      { text: `slot ${S_.toFixed(2)} × ${dep.toFixed(2)} m`, x: xs + S_ / 2, y: Wa + dep / 2, color: "#2f6fb3" },
+      { text: `aisle ${Wa.toFixed(2)} m`, x: 1.0, y: Wa / 2, align: "left", color: "#6b7280" },
+    ],
+    bounds: [-1, -1, L + 1, yTop + 1],
+    start: { x: 2 + D.ro, y: Wa * 0.5, th: 0 },
+    targetDir: Math.PI / 2,
+  };
+}
+
+function buildBays(sp) {
+  const a = clamp(sp.angle, 30, 90) * DEG, sa = Math.sin(a), ca = Math.cos(a);
+  const Wa = Math.max(2, sp.aisleWidth), w = Math.max(1.5, sp.bayWidth), d = Math.max(2.5, sp.bayDepth);
+  const p = Math.max(0, sp.pillarSize), inset = Math.max(0, sp.pillarInset);
+  const cl = sp.parkedLength, cw = sp.parkedWidth, N = 7, ti = 3, bw = w / sa, x0 = 8, T = 1.5;
+  const ls = d / sa;  // stall line length
+  const L = x0 + N * bw + ls * ca + 8, yb = Wa + d;
+  const u = [ca, sa];
+  const obstacles = [
+    { kind: "wall", poly: rect(-T, yb, L + T, yb + T) }, { kind: "wall", poly: rect(-T, -T, L + T, 0) },
+    { kind: "wall", poly: rect(-T, 0, 0, yb) }, { kind: "wall", poly: rect(L, 0, L + T, yb) },
+  ];
+  const lines = [];
+  for (let i = 0; i <= N; i++) {
+    const P0 = [x0 + i * bw, Wa];
+    lines.push([P0, [P0[0] + ls * u[0], P0[1] + ls * u[1]]]);
+  }
+  lines.push([[x0, Wa], [x0 + N * bw, Wa]]);
+  if (sp.neighborCars) {
+    const along = Math.max(cl / 2 * sa, (d - 0.25 - (cw / 2) * ca) / sa - cl / 2);
+    for (let i = 0; i < N; i++) {
+      if (i === ti) continue;
+      const bx = x0 + i * bw + bw / 2;
+      obstacles.push(parkedCar(bx + along * u[0], Wa + along * u[1], a, sp));
+    }
+  }
+  if (p > 0) {
+    for (const i of [ti, ti + 1]) {
+      const P0 = [x0 + i * bw, Wa], s = inset + p / 2;
+      obstacles.push({ kind: "pillar", poly: orect(P0[0] + s * u[0], P0[1] + s * u[1], a, p, p) });
+    }
+  }
+  const B0 = [x0 + ti * bw, Wa], B1 = [B0[0] + bw, Wa];
+  const tpoly = [B0, B1, [B1[0] + ls * u[0], B1[1] + ls * u[1]], [B0[0] + ls * u[0], B0[1] + ls * u[1]]];
+  const mid = [B0[0] + bw / 2 + ls / 2 * u[0], Wa + ls / 2 * u[1]];
+  return {
+    floor: [rect(0, 0, L, yb)],
+    obstacles, lines,
+    target: { kind: "bay", poly: tpoly },
+    labels: [
+      { text: `bay ${w.toFixed(2)} × ${d.toFixed(2)} m`, x: mid[0], y: mid[1] + 0.3, color: "#2f6fb3" },
+      { text: `${(a / DEG).toFixed(0)}°`, x: mid[0], y: mid[1] - 0.3, color: "#2f6fb3" },
+      { text: `aisle ${Wa.toFixed(2)} m`, x: 1.0, y: Wa / 2, align: "left", color: "#6b7280" },
+    ],
+    bounds: [-1, -1, L + 1, yb + 1],
+    start: { x: 2 + D.ro, y: Wa * 0.5, th: 0 },
+    targetDir: a,
+  };
+}
+
+function buildScene() {
+  S = SCENARIOS[P.scenario].build(SP());
+  for (const o of S.obstacles) o.bb = bbox(o.poly);
+  sceneVersion++;
+}
+
+// =====================================================================
+// Collision
+// =====================================================================
+function bbox(poly) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of poly) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return [x0, y0, x1, y1];
+}
+const bbOverlap = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
 function polysIntersect(a, b) {
   for (const poly of [a, b]) {
     for (let i = 0; i < poly.length; i++) {
@@ -274,11 +541,28 @@ function polysIntersect(a, b) {
   return true;
 }
 function collidesParts(parts) {
-  for (const pp of parts) for (const w of S.walls) if (polysIntersect(pp, w)) return true;
+  for (const pp of parts) {
+    const bb = bbox(pp);
+    for (const o of S.obstacles) if (bbOverlap(bb, o.bb) && polysIntersect(pp, o.poly)) return true;
+  }
   return false;
 }
 const collides = p => collidesParts(partsWorld(p));
-
+function pointInPoly(pt, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function pointInObstacle(pt) {
+  for (const o of S.obstacles) {
+    const b = o.bb;
+    if (pt[0] > b[0] && pt[0] < b[2] && pt[1] > b[1] && pt[1] < b[3] && pointInPoly(pt, o.poly)) return true;
+  }
+  return false;
+}
 function closestOnSeg(px, py, a, b) {
   const dx = b[0] - a[0], dy = b[1] - a[1];
   const t = clamp(((px - a[0]) * dx + (py - a[1]) * dy) / (dx * dx + dy * dy || 1), 0, 1);
@@ -298,25 +582,25 @@ function polyDistance(a, b) {
 }
 function clearance(parts) {
   let best = { d: Infinity };
-  for (const pp of parts) for (const w of S.walls) {
-    if (polysIntersect(pp, w)) return { d: 0, p: null, q: null };
-    const r = polyDistance(pp, w);
+  for (const pp of parts) for (const o of S.obstacles) {
+    if (polysIntersect(pp, o.poly)) return { d: 0, p: null, q: null };
+    const r = polyDistance(pp, o.poly);
     if (r.d < best.d) best = r;
   }
   return best;
 }
 
-// ---------- kinematics ----------
+// =====================================================================
+// Kinematics and state
+// =====================================================================
 function stepPose(p, ds, delta) {
   if (Math.abs(delta) < 1e-6) return { x: p.x + Math.cos(p.th) * ds, y: p.y + Math.sin(p.th) * ds, th: p.th };
   const R = D.wb / Math.tan(delta), th2 = p.th + ds / R;
   return { x: p.x + R * (Math.sin(th2) - Math.sin(p.th)), y: p.y - R * (Math.cos(th2) - Math.cos(p.th)), th: th2 };
 }
-
-// ---------- state ----------
-const st = { pose: null, delta: 0, driven: 0, gearChanges: 0, lastDir: 0, trail: [], blockedT: 0 };
+const st = { pose: null, delta: 0, driven: 0, gearChanges: 0, lastDir: 0, trail: [], blockedT: 0, moving: false };
 function resetCar() {
-  st.pose = { x: 2 + D.ro, y: S.Wt * 0.5, th: 0 };
+  st.pose = { ...S.start };
   st.delta = 0; st.driven = 0; st.gearChanges = 0; st.lastDir = 0; st.trail = [];
   pushTrail(true);
 }
@@ -329,10 +613,13 @@ function pushTrail(force) {
   }
 }
 
-// ---------- input ----------
+// =====================================================================
+// Input
+// =====================================================================
 const input = { fwd: false, back: false, left: false, right: false, fine: false };
 const KEYMAP = { ArrowUp: "fwd", KeyW: "fwd", ArrowDown: "back", KeyS: "back", ArrowLeft: "left", KeyA: "left", ArrowRight: "right", KeyD: "right" };
-function isTyping(e) { const t = e.target; return t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA"); }
+const isTyping = e => e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT");
+function cycle(key, values) { P[key] = values[(values.indexOf(P[key]) + 1) % values.length]; document.getElementById(key).value = P[key]; applyViewMode(); save(); }
 window.addEventListener("keydown", e => {
   if (isTyping(e)) return;
   if (e.key === "Shift") input.fine = true;
@@ -341,7 +628,9 @@ window.addEventListener("keydown", e => {
   if (e.code === "KeyC") st.delta = 0;
   else if (e.code === "KeyR") resetCar();
   else if (e.code === "KeyF") { fitView(); fitEgo(); }
-  else if (e.code === "KeyV") { const m = ["both", "top", "driver"]; P.viewMode = m[(m.indexOf(P.viewMode) + 1) % 3]; applyViewMode(); save(); }
+  else if (e.code === "KeyV") cycle("viewMode", ["both", "top", "driver"]);
+  else if (e.code === "KeyP") cycle("projMode", ["stop", "pass"]);
+  else if (e.code === "KeyH") cycle("reachMode", ["off", "fwd", "rev"]);
   else if (e.code === "KeyQ") st.pose.th += 5 * DEG;
   else if (e.code === "KeyE") st.pose.th -= 5 * DEG;
 });
@@ -350,14 +639,10 @@ window.addEventListener("keyup", e => {
   const k = KEYMAP[e.code]; if (k) input[k] = false;
 });
 window.addEventListener("blur", () => { for (const k in input) input[k] = false; });
-
 document.querySelectorAll("#pad button").forEach(b => {
   const k = b.dataset.k;
   if (k === "center") { b.addEventListener("pointerdown", e => { e.preventDefault(); st.delta = 0; }); return; }
-  if (k === "fine") {
-    b.addEventListener("pointerdown", e => { e.preventDefault(); input.fine = !input.fine; b.classList.toggle("on", input.fine); });
-    return;
-  }
+  if (k === "fine") { b.addEventListener("pointerdown", e => { e.preventDefault(); input.fine = !input.fine; b.classList.toggle("on", input.fine); }); return; }
   const on = e => { e.preventDefault(); b.setPointerCapture?.(e.pointerId); input[k] = true; b.classList.add("on"); };
   const off = () => { input[k] = false; b.classList.remove("on"); };
   b.addEventListener("pointerdown", on);
@@ -367,12 +652,16 @@ document.querySelectorAll("#pad button").forEach(b => {
   b.addEventListener("contextmenu", e => e.preventDefault());
 });
 
-// ---------- update ----------
+// =====================================================================
+// Update
+// =====================================================================
+let drag = null;
 function update(dt) {
   const fine = input.fine ? 0.25 : 1;
   const steer = (input.left ? 1 : 0) - (input.right ? 1 : 0);
   if (steer) st.delta = clamp(st.delta + steer * P.steerRate * DEG * fine * dt, -D.dmax, D.dmax);
   const mv = (input.fwd ? 1 : 0) - (input.back ? 1 : 0);
+  st.moving = false;
   if (mv) {
     let dist = Math.max(0, P.speed) * fine * dt;
     const wasColliding = collides(st.pose);
@@ -385,42 +674,134 @@ function update(dt) {
     }
     if (moved) {
       if (st.lastDir && st.lastDir !== mv) st.gearChanges++;
-      st.lastDir = mv;
+      st.lastDir = mv; st.moving = true;
       pushTrail(false);
     }
   }
   st.blockedT = Math.max(0, st.blockedT - dt);
-  if (P.follow && !drag) { const c = toWorld(st.pose, ...centerLocal()); cam.x = c[0]; cam.y = c[1]; }
+  if (P.follow && !drag) { const c = toWorld(st.pose, ...centerLocal()); topV.x = c[0]; topV.y = c[1]; }
 }
 
-// ---------- projection ----------
+// =====================================================================
+// Projection
+// =====================================================================
 function project(dir, startColliding) {
   const ds = 0.04, N = Math.ceil(Math.max(0.5, P.projLen) / ds);
-  const cl = centerLocal();
-  const corners = bodyLocal();
+  const pass = P.projMode === "pass";
+  const cl = centerLocal(), corners = bodyLocal();
   const mirrorTips = [[D.mx + 0.12, D.mw2], [D.mx + 0.12, -D.mw2]];
-  const out = { center: [], corners: corners.map(() => []), mirrors: mirrorTips.map(() => []), hit: null, endPose: null, free: P.projLen };
+  const out = { center: [], cflag: [], corners: corners.map(() => []), kflag: corners.map(() => []),
+    mirrors: mirrorTips.map(() => []), mflag: mirrorTips.map(() => []), hit: null, endPose: null, free: P.projLen };
   let p = { ...st.pose };
   for (let i = 0; i <= N; i++) {
-    if (i > 0 && !startColliding && collides(p)) { out.hit = p; out.free = (i - 1) * ds; break; }
-    out.center.push(toWorld(p, ...cl));
-    corners.forEach((c, j) => out.corners[j].push(toWorld(p, c[0], c[1])));
-    mirrorTips.forEach((c, j) => out.mirrors[j].push(toWorld(p, c[0], c[1])));
+    const coll = i > 0 && !startColliding && collides(p);
+    if (coll && !out.hit) { out.hit = p; out.free = (i - 1) * ds; if (!pass) break; }
+    out.center.push(toWorld(p, ...cl)); out.cflag.push(coll);
+    corners.forEach((c, j) => { const w = toWorld(p, c[0], c[1]); out.corners[j].push(w); out.kflag[j].push(pass && pointInObstacle(w)); });
+    mirrorTips.forEach((c, j) => { const w = toWorld(p, c[0], c[1]); out.mirrors[j].push(w); out.mflag[j].push(pass && pointInObstacle(w)); });
     out.endPose = p;
     p = stepPose(p, dir * ds, st.delta);
   }
   return out;
 }
 
-// ---------- views ----------
-// Each view maps world (m) to screen (px) with a center, scale and rotation.
+// =====================================================================
+// Reachability (single direction, hybrid lattice search, time sliced)
+// =====================================================================
+const RE = { key: "", q: [], head: 0, visited: new Set(), cells: new Map(), found: null, done: false, buckets: null, dirty: false };
+const R_CELL = 0.15, R_TH = 120, R_STEP = 0.5, R_SUB = 4, HEAT_BUCKETS = 10;
+function reachKey() {
+  if (P.reachMode === "off") return "off";
+  const p = st.pose;
+  return [P.reachMode, p.x.toFixed(3), p.y.toFixed(3), p.th.toFixed(4), sceneVersion, D.version, P.reachHorizon].join("|");
+}
+function stateKey(p) {
+  const ix = Math.round(p.x / R_CELL) + 1000, iy = Math.round(p.y / R_CELL) + 1000;
+  const it = ((Math.round(p.th / (2 * Math.PI / R_TH)) % R_TH) + R_TH) % R_TH;
+  return (ix * 2000 + iy) * R_TH + it;
+}
+function reachRestart(key) {
+  RE.key = key; RE.q = []; RE.head = 0; RE.visited = new Set(); RE.cells = new Map(); RE.found = null; RE.done = key === "off"; RE.dirty = true;
+  if (key === "off") return;
+  if (collides(st.pose)) { RE.done = true; return; }
+  const n = { x: st.pose.x, y: st.pose.y, th: st.pose.th, d: 0, parent: null };
+  RE.q.push(n); RE.visited.add(stateKey(n));
+  recordCell(n);
+}
+function recordCell(n, noTarget) {
+  const c = toWorld(n, ...centerLocal());
+  const k = Math.round(c[0] / R_CELL) * 100000 + Math.round(c[1] / R_CELL);
+  const prev = RE.cells.get(k);
+  if (prev === undefined || n.d < prev) { RE.cells.set(k, n.d); RE.dirty = true; }
+  if (!noTarget && !RE.found && S.target && pointInPoly(c, S.target.poly)) {
+    const parts = partsWorld(n);
+    if (parts.every(pp => pp.every(v => pointInPoly(v, S.target.poly)))) RE.found = n;
+  }
+}
+function reachStep(budgetMs) {
+  if (RE.done) return;
+  const t0 = performance.now();
+  const dir = P.reachMode === "rev" ? -1 : 1;
+  const steers = [-1, -0.5, 0, 0.5, 1].map(f => f * D.dmax);
+  const H = Math.max(1, P.reachHorizon);
+  while (RE.head < RE.q.length) {
+    const n = RE.q[RE.head++];
+    if (n.d + R_STEP <= H) {
+      for (const s of steers) {
+        const end = stepPose(n, dir * R_STEP, s);
+        const k = stateKey(end);
+        if (RE.visited.has(k)) continue;
+        RE.visited.add(k);
+        // check the arc at sub-steps, keep the intermediate poses for the heatmap
+        const sub = [];
+        let p = n, ok = true;
+        for (let i = 1; i <= R_SUB; i++) {
+          p = stepPose(n, dir * R_STEP * i / R_SUB, s);
+          if (collides(p)) { ok = false; break; }
+          sub.push(p);
+        }
+        if (!ok) continue;
+        const m = { x: end.x, y: end.y, th: end.th, d: n.d + R_STEP, parent: n };
+        for (let i = 0; i < sub.length - 1; i++) recordCell({ ...sub[i], d: n.d + R_STEP * (i + 1) / R_SUB, parent: n });
+        RE.q.push(m);
+        recordCell(m);
+      }
+    }
+    if ((RE.head & 31) === 0 && performance.now() - t0 > budgetMs) return;
+  }
+  RE.done = true;
+}
+function heatBuckets() {
+  if (!RE.dirty && RE.buckets) return RE.buckets;
+  const H = Math.max(1, P.reachHorizon);
+  const b = Array.from({ length: HEAT_BUCKETS }, () => []);
+  for (const [k, d] of RE.cells) {
+    const ix = Math.round(k / 100000), iy = k - ix * 100000;
+    b[Math.min(HEAT_BUCKETS - 1, Math.floor(d / H * HEAT_BUCKETS))].push(ix * R_CELL, iy * R_CELL);
+  }
+  RE.buckets = b; RE.dirty = false;
+  return b;
+}
+function heatColor(i) {
+  const t = i / (HEAT_BUCKETS - 1);
+  const c0 = [11, 122, 117], c1 = [127, 183, 230];
+  const c = c0.map((v, j) => Math.round(v + (c1[j] - v) * t));
+  return `rgba(${c[0]},${c[1]},${c[2]},${0.55 - 0.25 * t})`;
+}
+function foundPath() {
+  const pts = [];
+  for (let n = RE.found; n; n = n.parent) pts.push(toWorld(n, ...centerLocal()));
+  return pts.reverse();
+}
+
+// =====================================================================
+// Views
+// =====================================================================
 function makeView(id, ego) {
   const cv = document.getElementById(id);
-  return { cv, ctx: cv.getContext("2d"), W: 0, H: 0, x: 15, y: 5, scale: 30, rot: 0, ego, pane: cv.parentElement, fitted: false };
+  return { cv, ctx: cv.getContext("2d"), W: 0, H: 0, x: 15, y: 5, scale: 30, rot: 0, ego, pane: cv.parentElement };
 }
-const topV = makeView("cv", false);
-const egoV = makeView("cv2", true);
-const cam = topV;
+const topV = makeView("cv", false), egoV = makeView("cv2", true);
 let V = topV, ctx = topV.ctx, W = 0, H = 0;
 function useView(v) { V = v; ctx = v.ctx; W = v.W; H = v.H; }
 function resizeView(v) {
@@ -430,8 +811,7 @@ function resizeView(v) {
   v.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 function fitView() {
-  const v = topV;
-  const x0 = -1, x1 = S.L + 1, y0 = -1, y1 = S.gy1 + 1;
+  const v = topV, [x0, y0, x1, y1] = S.bounds;
   v.x = (x0 + x1) / 2; v.y = (y0 + y1) / 2;
   v.scale = Math.min(v.W / (x1 - x0), v.H / (y1 - y0)) * 0.92 || 30;
 }
@@ -444,11 +824,33 @@ function screenToWorld(v, px, py) {
   const rx = (px - v.W / 2) / v.scale, ry = (v.H / 2 - py) / v.scale, c = Math.cos(v.rot), s = Math.sin(v.rot);
   return { x: v.x + c * rx + s * ry, y: v.y - s * rx + c * ry };
 }
-const toWorldScreen = (px, py) => screenToWorld(topV, px, py);
+function setWorldTransform() {
+  const dpr = window.devicePixelRatio || 1, k = V.scale, c = Math.cos(V.rot), s = Math.sin(V.rot);
+  const a = c * k, b = -s * k, cc = -s * k, d = -c * k;
+  const e = V.W / 2 - (a * V.x + cc * V.y), f = V.H / 2 - (b * V.x + d * V.y);
+  ctx.setTransform(dpr * a, dpr * b, dpr * cc, dpr * d, dpr * e, dpr * f);
+}
+function resetTransform() { const dpr = window.devicePixelRatio || 1; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
 
+// =====================================================================
+// Drawing
+// =====================================================================
 function pathPoly(poly) { ctx.beginPath(); poly.forEach(([x, y], i) => i ? ctx.lineTo(...P2(x, y)) : ctx.moveTo(...P2(x, y))); ctx.closePath(); }
 function pathLine(pts) { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(...P2(x, y)) : ctx.moveTo(...P2(x, y))); }
-
+function drawRuns(pts, flags, color, bad) {
+  // draw a polyline split into runs by flag; flagged runs in the "bad" color
+  let i = 0;
+  while (i < pts.length - 1) {
+    const f = !!flags[i + 1];
+    ctx.strokeStyle = f ? bad : color;
+    ctx.beginPath(); ctx.moveTo(...P2(...pts[i]));
+    let j = i + 1;
+    while (j < pts.length && !!flags[j] === f) { ctx.lineTo(...P2(...pts[j])); j++; }
+    if (j < pts.length) ctx.lineTo(...P2(...pts[j]));
+    ctx.stroke();
+    i = j;
+  }
+}
 function drawGrid() {
   const cs = [[0, 0], [W, 0], [0, H], [W, H]].map(([a, b]) => screenToWorld(V, a, b));
   const x0 = Math.min(...cs.map(p => p.x)), x1 = Math.max(...cs.map(p => p.x));
@@ -456,86 +858,115 @@ function drawGrid() {
   const step = V.scale > 60 ? 0.5 : 1;
   ctx.lineWidth = 1;
   const line = (ax, ay, bx, by, major) => {
-    ctx.strokeStyle = major ? "rgba(0,0,0,.13)" : "rgba(0,0,0,.055)";
+    ctx.strokeStyle = major ? "rgba(0,0,0,.12)" : "rgba(0,0,0,.05)";
     ctx.beginPath(); ctx.moveTo(...P2(ax, ay)); ctx.lineTo(...P2(bx, by)); ctx.stroke();
   };
   for (let x = Math.floor(x0 / step) * step; x <= x1; x += step) line(x, y0, x, y1, Math.abs(x % 5) < 1e-6);
   for (let y = Math.floor(y0 / step) * step; y <= y1; y += step) line(x0, y, x1, y, Math.abs(y % 5) < 1e-6);
 }
-
 function label(text, x, y, opts = {}) {
   ctx.save();
   ctx.font = (opts.bold ? "600 " : "") + "11.5px system-ui, sans-serif";
   ctx.textAlign = opts.align || "center"; ctx.textBaseline = "middle";
-  const w = ctx.measureText(text).width;
-  if (opts.bg) { ctx.fillStyle = opts.bg; const q = P2(x, y); ctx.fillRect(q[0] - (ctx.textAlign === "center" ? w / 2 : 0) - 3, q[1] + (opts.dy || 0) - 8, w + 6, 16); }
+  const w = ctx.measureText(text).width, q = P2(x, y), dy = opts.dy || 0;
+  if (opts.bg) { ctx.fillStyle = opts.bg; ctx.fillRect(q[0] - (ctx.textAlign === "center" ? w / 2 : 0) - 3, q[1] + dy - 8, w + 6, 16); }
   ctx.fillStyle = opts.color || "#3a3f47";
-  { const q = P2(x, y); ctx.fillText(text, q[0], q[1] + (opts.dy || 0)); }
+  ctx.fillText(text, q[0], q[1] + dy);
   ctx.restore();
 }
-
 function drawScene() {
   ctx.fillStyle = "#3a3e45"; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = "#ebe8e2";
-  S.free.forEach(r => { pathPoly(r); ctx.fill(); });
-  ctx.save(); ctx.beginPath(); S.free.forEach(r => { r.forEach(([x, y], i) => i ? ctx.lineTo(...P2(x, y)) : ctx.moveTo(...P2(x, y))); ctx.closePath(); });
+  S.floor.forEach(r => { pathPoly(r); ctx.fill(); });
+  ctx.save(); ctx.beginPath();
+  S.floor.forEach(r => { r.forEach(([x, y], i) => i ? ctx.lineTo(...P2(x, y)) : ctx.moveTo(...P2(x, y))); ctx.closePath(); });
   ctx.clip(); drawGrid(); ctx.restore();
-  // garage floor tint
-  ctx.fillStyle = "rgba(47,111,179,.07)"; pathPoly(rect(S.gx, S.gy0, S.gx + S.gw, S.gy1)); ctx.fill();
-  // door line (inner face)
-  ctx.save(); ctx.setLineDash([6, 4]); ctx.strokeStyle = "#2f6fb3"; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(...P2(S.dx0, S.gy0)); ctx.lineTo(...P2(S.dx1, S.gy0)); ctx.stroke(); ctx.restore();
-  label(`garage ${S.gw.toFixed(2)} × ${S.gd.toFixed(2)} m`, S.gx + S.gw / 2, S.gy1 - 0.35, { color: "#2f6fb3" });
-  label(`door ${S.dw.toFixed(2)} m`, (S.dx0 + S.dx1) / 2, S.gy0 + 0.3, { color: "#2f6fb3" });
-  label(`tunnel ${S.Wt.toFixed(2)} m`, 1.0, S.Wt / 2, { align: "left", color: "#6b7280" });
+  // target
+  ctx.fillStyle = "rgba(47,111,179,.10)"; pathPoly(S.target.poly); ctx.fill();
+  // paint lines
+  ctx.strokeStyle = "#d1a92e"; ctx.lineWidth = Math.max(1.5, 0.1 * V.scale);
+  S.lines.forEach(l => { pathLine(l); ctx.stroke(); });
+  if (S.target.doorLine) {
+    ctx.save(); ctx.setLineDash([6, 4]); ctx.strokeStyle = "#2f6fb3"; ctx.lineWidth = 1.5;
+    pathLine(S.target.doorLine); ctx.stroke(); ctx.restore();
+  }
+  // obstacles
+  for (const o of S.obstacles) {
+    if (o.kind === "wall") { ctx.fillStyle = "#3a3e45"; pathPoly(o.poly); ctx.fill(); }
+    else if (o.kind === "curb") { ctx.fillStyle = "#a9aeb5"; pathPoly(o.poly); ctx.fill(); }
+    else if (o.kind === "pillar") { ctx.fillStyle = "#2a2d33"; pathPoly(o.poly); ctx.fill(); }
+    else if (o.kind === "car") {
+      ctx.fillStyle = "#9aa1ab"; ctx.strokeStyle = "#646a73"; ctx.lineWidth = 1;
+      pathPoly(o.poly); ctx.fill(); ctx.stroke();
+      const p = o.pose, l = o.len / 2, w = o.wid / 2;
+      const ws = [[l - 1.3, -w + 0.12], [l - 0.9, -w + 0.18], [l - 0.9, w - 0.18], [l - 1.3, w - 0.12]].map(([x, y]) => toWorld(p, x, y));
+      ctx.fillStyle = "rgba(255,255,255,.45)"; pathPoly(ws); ctx.fill();
+    }
+  }
+  S.labels.forEach(l => label(l.text, l.x, l.y, { color: l.color, align: l.align }));
 }
-
+function drawHeat() {
+  if (P.reachMode === "off" || RE.cells.size === 0) return;
+  const b = heatBuckets();
+  setWorldTransform();
+  const h = R_CELL / 2;
+  for (let i = 0; i < b.length; i++) {
+    const arr = b[i]; if (!arr.length) continue;
+    ctx.fillStyle = heatColor(i);
+    ctx.beginPath();
+    for (let j = 0; j < arr.length; j += 2) ctx.rect(arr[j] - h, arr[j + 1] - h, R_CELL, R_CELL);
+    ctx.fill();
+  }
+  resetTransform();
+}
+function drawFoundPath() {
+  if (!RE.found || P.reachMode === "off") return;
+  const pts = foundPath();
+  ctx.save();
+  ctx.strokeStyle = "#8e44ad"; ctx.lineWidth = 2.5; ctx.setLineDash([7, 4]);
+  pathLine(pts); ctx.stroke(); ctx.setLineDash([]);
+  ctx.strokeStyle = "rgba(142,68,173,.8)"; ctx.lineWidth = 1.5;
+  partsWorld(RE.found).forEach(pp => { pathPoly(pp); ctx.stroke(); });
+  ctx.restore();
+}
 function drawProjection(pr, color) {
+  const bad = "#cf3f3f";
   ctx.save();
   if (P.showCorners) {
-    ctx.strokeStyle = color; ctx.globalAlpha = 0.55; ctx.lineWidth = 1.2;
-    pr.corners.forEach(c => { pathLine(c); ctx.stroke(); });
+    ctx.globalAlpha = 0.6; ctx.lineWidth = 1.2;
+    pr.corners.forEach((c, j) => drawRuns(c, pr.kflag[j], color, bad));
   }
   if (P.showMirrorPaths && D.mw2 > D.w2 + 0.005) {
-    ctx.strokeStyle = color; ctx.globalAlpha = 0.7; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
-    pr.mirrors.forEach(c => { pathLine(c); ctx.stroke(); });
+    ctx.globalAlpha = 0.75; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
+    pr.mirrors.forEach((c, j) => drawRuns(c, pr.mflag[j], color, bad));
     ctx.setLineDash([]);
   }
-  ctx.globalAlpha = 1; ctx.lineWidth = 2.5; ctx.strokeStyle = color;
-  pathLine(pr.center); ctx.stroke();
+  ctx.globalAlpha = 1; ctx.lineWidth = 2.5;
+  drawRuns(pr.center, pr.cflag, color, bad);
   if (pr.hit) {
-    const parts = partsWorld(pr.hit);
-    ctx.fillStyle = "rgba(207,63,63,.14)"; ctx.strokeStyle = "#cf3f3f"; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
-    parts.forEach(pp => { pathPoly(pp); ctx.fill(); ctx.stroke(); });
+    ctx.fillStyle = "rgba(207,63,63,.12)"; ctx.strokeStyle = bad; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+    partsWorld(pr.hit).forEach(pp => { pathPoly(pp); ctx.fill(); ctx.stroke(); });
     ctx.setLineDash([]);
-    const last = pr.center[pr.center.length - 1];
-    if (last) { ctx.fillStyle = "#cf3f3f"; ctx.beginPath(); ctx.arc(...P2(last[0], last[1]), 4, 0, Math.PI * 2); ctx.fill(); }
-  } else if (pr.endPose) {
-    ctx.strokeStyle = color; ctx.globalAlpha = 0.35; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+    const hc = toWorld(pr.hit, ...centerLocal());
+    ctx.fillStyle = bad; ctx.beginPath(); ctx.arc(...P2(hc[0], hc[1]), 4, 0, Math.PI * 2); ctx.fill();
+  }
+  if (pr.endPose && (!pr.hit || P.projMode === "pass")) {
+    ctx.strokeStyle = pr.cflag[pr.cflag.length - 1] ? bad : color; ctx.globalAlpha = 0.4; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
     pathPoly(partsWorld(pr.endPose)[0]); ctx.stroke(); ctx.setLineDash([]);
   }
   ctx.restore();
 }
-
 function drawCar(colliding) {
-  const p = st.pose;
-  const parts = partsWorld(p);
-  const blocked = st.blockedT > 0;
-  // body
-  ctx.fillStyle = colliding ? "rgba(207,63,63,.85)" : "rgba(47,111,179,.88)";
+  const p = st.pose, parts = partsWorld(p), blocked = st.blockedT > 0;
+  ctx.fillStyle = colliding ? "rgba(207,63,63,.85)" : "rgba(47,111,179,.9)";
   ctx.strokeStyle = colliding || blocked ? "#cf3f3f" : "#1d3f66"; ctx.lineWidth = colliding || blocked ? 3 : 1.5;
   pathPoly(parts[0]); ctx.fill(); ctx.stroke();
   for (let i = 1; i < parts.length; i++) { ctx.fillStyle = "#1d3f66"; pathPoly(parts[i]); ctx.fill(); }
-  // windshield marker
   const ws = [[D.wb - 0.35, -D.w2 + 0.12], [D.wb + 0.05, -D.w2 + 0.18], [D.wb + 0.05, D.w2 - 0.18], [D.wb - 0.35, D.w2 - 0.12]].map(([x, y]) => toWorld(p, x, y));
   ctx.fillStyle = "rgba(255,255,255,.55)"; pathPoly(ws); ctx.fill();
-  // wheels with Ackermann visual
   const wl = 0.68, ww = 0.22, th = D.trackHalf;
   let dl = 0, dr = 0;
-  if (Math.abs(st.delta) > 1e-6) {
-    const R = D.wb / Math.tan(st.delta);
-    dl = Math.atan(D.wb / (R - th)); dr = Math.atan(D.wb / (R + th));
-  }
+  if (Math.abs(st.delta) > 1e-6) { const R = D.wb / Math.tan(st.delta); dl = Math.atan(D.wb / (R - th)); dr = Math.atan(D.wb / (R + th)); }
   const wheel = (cx, cy, ang) => {
     const c = Math.cos(ang), s = Math.sin(ang);
     const pts = [[-wl / 2, -ww / 2], [wl / 2, -ww / 2], [wl / 2, ww / 2], [-wl / 2, ww / 2]].map(([x, y]) => toWorld(p, cx + c * x - s * y, cy + s * x + c * y));
@@ -543,51 +974,78 @@ function drawCar(colliding) {
   };
   wheel(0, th - ww / 2, 0); wheel(0, -th + ww / 2, 0);
   wheel(D.wb, th - ww / 2, dl); wheel(D.wb, -th + ww / 2, dr);
-  // rear axle point
   ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(...P2(p.x, p.y), 2.5, 0, Math.PI * 2); ctx.fill();
 }
+function drawCompass(v) {
+  const cx = W - 34, cy = 64, r = 18;
+  ctx.save();
+  ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.beginPath(); ctx.arc(cx, cy, r + 6, 0, Math.PI * 2); ctx.fill();
+  const ang = (S.targetDir || Math.PI / 2) + v.rot;   // world direction on screen
+  const ux = Math.cos(ang), uy = -Math.sin(ang);
+  ctx.strokeStyle = "#2f6fb3"; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(cx - ux * r * 0.6, cy - uy * r * 0.6); ctx.lineTo(cx + ux * r * 0.6, cy + uy * r * 0.6); ctx.stroke();
+  ctx.fillStyle = "#2f6fb3"; ctx.beginPath(); ctx.arc(cx + ux * r * 0.6, cy + uy * r * 0.6, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.font = "600 9px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("T", cx + ux * (r + 1), cy + uy * (r + 1));
+  ctx.restore();
+}
 
-// ---------- HUD ----------
+// =====================================================================
+// HUD
+// =====================================================================
 const hud = document.getElementById("hud");
-function fmtM(v) { return v >= 10 ? v.toFixed(1) + " m" : v.toFixed(2) + " m"; }
+const fmtM = v => v >= 10 ? v.toFixed(1) + " m" : v.toFixed(2) + " m";
 function updateHud(colliding, cl, fwd, rev, parts) {
   const deg = st.delta / DEG, pct = Math.abs(st.delta) / D.dmax * 100;
   const dirTxt = Math.abs(deg) < 0.05 ? "straight" : (deg > 0 ? "left" : "right");
   const R = Math.abs(st.delta) > 1e-6 ? D.wb / Math.tan(Math.abs(st.delta)) : Infinity;
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  parts.forEach(pp => pp.forEach(([x, y]) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }));
+  const pts = parts.flat();
+  const tp = S.target.poly;
+  const inCount = pts.filter(v => pointInPoly(v, tp)).length;
   let status;
-  if (colliding) status = '<span class="bad">Overlapping a wall (placed by hand). Drive out.</span>';
-  else if (minY >= S.gy0 - 1e-6) {
-    status = `<span class="good">Fully in garage, door can close</span><br>` +
-      `<span class="k">behind door line</span> ${fmtM(minY - S.gy0)} · <span class="k">front gap</span> ${fmtM(S.gy1 - maxY)}<br>` +
-      `<span class="k">side gaps</span> L ${fmtM(minX - S.gx)} · R ${fmtM(S.gx + S.gw - maxX)}`;
-  } else if (maxY > S.Wt) status = '<span class="warn">Partly in the garage</span>';
-  else status = '<span class="k">In the tunnel</span>';
+  if (colliding) status = '<span class="bad">Overlapping an obstacle (placed by hand). Drive out.</span>';
+  else if (inCount === pts.length) {
+    const t = S.target;
+    if (t.kind === "garage" || t.kind === "rect") {
+      const xs = pts.map(v => v[0]), ys = pts.map(v => v[1]), r = t.rect;
+      const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+      if (t.kind === "garage") {
+        status = `<span class="good">Fully in garage, door can close</span><br>` +
+          `<span class="k">behind door line</span> ${fmtM(minY - r.y0)} · <span class="k">front gap</span> ${fmtM(r.y1 - maxY)}<br>` +
+          `<span class="k">side gaps</span> L ${fmtM(minX - r.x0)} · R ${fmtM(r.x1 - maxX)}`;
+      } else {
+        status = `<span class="good">Inside the slot</span><br>` +
+          `<span class="k">slot ends</span> rear ${fmtM(minX - r.x0)} · front ${fmtM(r.x1 - maxX)}<br>` +
+          `<span class="k">to curb/wall side</span> ${fmtM(r.y1 - maxY)}`;
+      }
+    } else status = '<span class="good">Inside the bay lines</span>';
+  } else if (inCount > 0) status = '<span class="warn">Partly in the space</span>';
+  else status = '<span class="k">Outside the space</span>';
   const clTxt = colliding ? '<span class="bad">contact</span>' :
     `<span class="${cl.d < 0.05 ? "bad" : cl.d < 0.15 ? "warn" : ""}">${(cl.d * 100).toFixed(0)} cm</span>`;
   const freeTxt = pr => pr.hit ? `<span class="${pr.free < 0.3 ? "bad" : "warn"}">${fmtM(pr.free)}</span>` : `&gt; ${fmtM(P.projLen)}`;
+  let reach = "";
+  if (P.reachMode !== "off") {
+    const dirName = P.reachMode === "fwd" ? "forward only" : "reverse only";
+    if (RE.key === "") reach = `<span class="k">space ${dirName}</span> updates when the car stops`;
+    else if (RE.found) reach = `<span class="k">space ${dirName}</span> <span class="good">reachable, ${fmtM(RE.found.d)} path</span>`;
+    else if (!RE.done) reach = `<span class="k">space ${dirName}</span> searching…`;
+    else reach = `<span class="k">space ${dirName}</span> <span class="warn">not within ${fmtM(P.reachHorizon)}</span>`;
+    reach += "<br>";
+  }
   hud.innerHTML =
     `<span class="k">wheel</span> ${Math.abs(deg).toFixed(1)}° ${dirTxt} (${pct.toFixed(0)}% of ${(D.dmax / DEG).toFixed(1)}°)<br>` +
     `<span class="k">radius at rear axle</span> ${Number.isFinite(R) ? fmtM(R) : "∞"}<br>` +
     `<span class="k">free travel</span> fwd ${freeTxt(fwd)} · rev ${freeTxt(rev)}<br>` +
     `<span class="k">min clearance</span> ${clTxt}${st.blockedT > 0 ? ' <span class="bad">blocked</span>' : ""}<br>` +
     `<span class="k">driven</span> ${fmtM(st.driven)} · <span class="k">direction changes</span> ${st.gearChanges}<br>` +
-    status;
+    reach + status;
 }
 
-// ---------- pointer: drag car, pan, zoom ----------
-const pointers = new Map();
-let drag = null;
+// =====================================================================
+// Pointer
+// =====================================================================
 const panel = document.getElementById("panel");
-function pointInPoly(pt, poly) {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [xi, yi] = poly[i], [xj, yj] = poly[j];
-    if ((yi > pt.y) !== (yj > pt.y) && pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi) inside = !inside;
-  }
-  return inside;
-}
 function attachPointer(v) {
   const cv = v.cv, pts = new Map();
   let dg = null;
@@ -597,7 +1055,7 @@ function attachPointer(v) {
     panel.classList.remove("open");
     if (pts.size === 1) {
       const w = screenToWorld(v, e.offsetX, e.offsetY);
-      if (!v.ego && pointInPoly(w, partsWorld(st.pose)[0])) dg = { mode: "car", ox: w.x - st.pose.x, oy: w.y - st.pose.y };
+      if (!v.ego && pointInPoly([w.x, w.y], partsWorld(st.pose)[0])) dg = { mode: "car", ox: w.x - st.pose.x, oy: w.y - st.pose.y };
       else if (!v.ego) dg = { mode: "pan", sx: e.offsetX, sy: e.offsetY, cx: v.x, cy: v.y };
       else dg = null;
       if (dg) cv.style.cursor = "grabbing";
@@ -639,44 +1097,43 @@ function attachPointer(v) {
     v.x += before.x - after.x; v.y += before.y - after.y;
   }, { passive: false });
 }
+attachPointer(topV); attachPointer(egoV);
 
-// ---------- buttons ----------
+// =====================================================================
+// Buttons, view mode, params
+// =====================================================================
 document.getElementById("bReset").onclick = () => resetCar();
 document.getElementById("bTrail").onclick = () => { st.trail = []; pushTrail(true); };
 document.getElementById("bFit").onclick = () => { fitView(); fitEgo(); };
-document.getElementById("bDefaults").onclick = () => { setDefaults(); buildFields(); onParamsChanged(); applyViewMode(); resetCar(); fitView(); fitEgo(); };
+document.getElementById("bDefaults").onclick = () => { setDefaults(); buildPanel(); applyViewMode(); onParamsChanged(); resetCar(); fitView(); fitEgo(); };
 document.getElementById("toggle").onclick = () => panel.classList.toggle("open");
-attachPointer(topV); attachPointer(egoV);
-const viewSel = document.getElementById("viewMode");
 function applyViewMode() {
   const m = P.viewMode || "both";
-  viewSel.value = m;
   topV.pane.style.display = m === "driver" ? "none" : "";
   egoV.pane.style.display = m === "top" ? "none" : "";
 }
-viewSel.onchange = () => { P.viewMode = viewSel.value; applyViewMode(); save(); };
-
 function onParamsChanged() {
   derive(); buildScene();
   st.delta = clamp(st.delta, -D.dmax, D.dmax);
   save();
 }
 
-// ---------- main loop ----------
-function drawWorld(v, ctxData) {
-  const { parts, colliding, cl, fwd, rev } = ctxData;
+// =====================================================================
+// Main loop
+// =====================================================================
+function drawWorld(v, data) {
+  const { colliding, cl, fwd, rev } = data;
   if (v.cv.clientWidth === 0 || v.cv.clientHeight === 0) return;
-  if (v.W !== v.cv.clientWidth || v.H !== v.cv.clientHeight) {
-    resizeView(v);
-    v.ego ? fitEgo() : fitView();
-  }
+  if (v.W !== v.cv.clientWidth || v.H !== v.cv.clientHeight) { resizeView(v); v.ego ? fitEgo() : fitView(); }
   if (v.ego) {
     const c = toWorld(st.pose, ...centerLocal());
     v.x = c[0]; v.y = c[1]; v.rot = Math.PI / 2 - st.pose.th;
   }
   useView(v);
   drawScene();
+  drawHeat();
   if (st.trail.length > 1) { ctx.strokeStyle = "rgba(60,60,60,.45)"; ctx.lineWidth = 1.5; ctx.setLineDash([2, 3]); pathLine(st.trail); ctx.stroke(); ctx.setLineDash([]); }
+  drawFoundPath();
   drawProjection(rev, "#c7781a");
   drawProjection(fwd, "#1f9d6b");
   drawCar(colliding);
@@ -685,21 +1142,7 @@ function drawWorld(v, ctxData) {
     ctx.beginPath(); ctx.moveTo(...P2(cl.p[0], cl.p[1])); ctx.lineTo(...P2(cl.q[0], cl.q[1])); ctx.stroke();
     label(`${(cl.d * 100).toFixed(0)} cm`, (cl.p[0] + cl.q[0]) / 2, (cl.p[1] + cl.q[1]) / 2, { bg: "rgba(255,255,255,.9)", bold: true, color: "#1d2128", dy: -12 });
   }
-  if (v.ego) drawNorth(v);
-}
-function drawNorth(v) {
-  // small compass showing the tunnel axis, so you keep orientation while the world rotates
-  const cx = W - 34, cy = 64, r = 18;
-  ctx.save();
-  ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.beginPath(); ctx.arc(cx, cy, r + 6, 0, Math.PI * 2); ctx.fill();
-  const ang = v.rot; // world +y (towards the garage) on screen
-  const ux = -Math.sin(ang), uy = -Math.cos(ang);
-  ctx.strokeStyle = "#2f6fb3"; ctx.lineWidth = 2.5;
-  ctx.beginPath(); ctx.moveTo(cx - ux * r * 0.7, cy - uy * r * 0.7); ctx.lineTo(cx + ux * r * 0.7, cy + uy * r * 0.7); ctx.stroke();
-  ctx.fillStyle = "#2f6fb3"; ctx.beginPath(); ctx.arc(cx + ux * r * 0.7, cy + uy * r * 0.7, 3.5, 0, Math.PI * 2); ctx.fill();
-  ctx.font = "600 9px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillText("G", cx + ux * (r + 1), cy + uy * (r + 1));
-  ctx.restore();
+  if (v.ego) drawCompass(v);
 }
 let lastT = performance.now();
 function frame(t) {
@@ -709,17 +1152,22 @@ function frame(t) {
   const colliding = collidesParts(parts);
   const cl = clearance(parts);
   const fwd = project(1, colliding), rev = project(-1, colliding);
-  const data = { parts, colliding, cl, fwd, rev };
+  // reachability: restart on pose/scene change, compute only while the car is still
+  const key = reachKey();
+  if (key !== RE.key && !st.moving && !drag) reachRestart(key);
+  else if (key !== RE.key) { RE.cells = new Map(); RE.found = null; RE.dirty = true; RE.done = true; RE.key = ""; }
+  if (!st.moving) reachStep(8);
+  const data = { colliding, cl, fwd, rev };
   drawWorld(topV, data);
   drawWorld(egoV, data);
   updateHud(colliding, cl, fwd, rev, parts);
   requestAnimationFrame(frame);
 }
 
-buildFields();
+buildPanel();
 derive(); buildScene();
 applyViewMode();
-resizeView(topV); resizeView(egoV); fitView(); fitEgo(); topV.fitted = egoV.fitted = true;
+resizeView(topV); resizeView(egoV); fitView(); fitEgo();
 resetCar();
 requestAnimationFrame(frame);
 })();
