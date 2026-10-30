@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Will it fit? Parking simulator and planner</title>
+</head>
+<body>
+<div id="app">
+  <aside id="panel">
+    <h1>Will it fit?</h1>
+    <div class="sub">Parking simulator and manoeuvre planner</div>
+
+    <h2>Scenario</h2>
+    <div class="row sel"><label for="scenario">Scenario</label><select id="scenario"></select></div>
+    <div id="scnFields"></div>
+
+    <h2>Car</h2>
+    <label class="chk"><input type="checkbox" id="mirrorsFolded"> Mirrors folded</label>
+    <div id="carFields"></div>
+    <div class="warnbox" id="warn"></div>
+
+    <h2>Projection</h2>
+    <div class="row sel"><label for="projMode">When a projection hits something</label>
+      <select id="projMode"><option value="stop">Stop at first contact</option><option value="pass">Pass through, mark overlap</option></select></div>
+    <div id="simFields"></div>
+    <label class="chk"><input type="checkbox" id="showCorners"> Show corner paths</label>
+    <label class="chk"><input type="checkbox" id="showMirrorPaths"> Show mirror tip paths</label>
+
+    <h2>Reachability heatmap</h2>
+    <div class="row sel"><label for="reachMode">Show where the car can get</label>
+      <select id="reachMode"><option value="off">Off</option><option value="fwd">Forward only</option><option value="rev">Reverse only</option></select></div>
+    <div id="reachFields"></div>
+    <div class="note">Every position the car's center can reach in one move without changing direction, with any steering along the way. Color shows the distance driven. Recomputed whenever the car stops.</div>
+
+    <h2>Planner</h2>
+    <div class="row sel"><label for="planOrient">Final orientation</label>
+      <select id="planOrient"><option value="any">Any</option><option value="fwd">Forwards (nose in)</option><option value="rev">Backwards (reversed in)</option></select></div>
+    <div class="row sel"><label for="planRes">Search resolution</label>
+      <select id="planRes"><option value="normal">Normal</option><option value="fine">Fine (slower, tighter gaps)</option></select></div>
+    <div id="planFields"></div>
+    <div class="btns"><button id="bPlan">Plan from current position</button><button id="bPlanCancel">Cancel</button></div>
+    <div class="note" id="planStatus" style="margin-top:6px"></div>
+    <div class="note" style="margin-top:6px">Forwards means the front points into the space (garage, bays) or the same way as the parked cars (parallel). Penalties are in metres of driving: a direction change costing 4 m means the planner prefers 4 m of extra driving over one more change.</div>
+
+    <h2>View</h2>
+    <div class="row sel"><label for="viewMode">Views</label>
+      <select id="viewMode"><option value="both">Both</option><option value="top">Top view only</option><option value="driver">Driver view only</option></select></div>
+    <label class="chk"><input type="checkbox" id="follow"> Top view follows car</label>
+    <div class="btns">
+      <button id="bReset">Reset car</button>
+      <button id="bTrail">Restart recording</button>
+      <button id="bFit">Fit views</button>
+      <button id="bDefaults">Restore defaults</button>
+    </div>
+
+    <h2>Controls</h2>
+    <div class="note">
+      <div><kbd>↑</kbd> <kbd>↓</kbd> drive forward / reverse (hold)</div>
+      <div><kbd>←</kbd> <kbd>→</kbd> turn the wheel (it stays where you leave it)</div>
+      <div><kbd>Shift</kbd> hold for fine control (25%)</div>
+      <div><kbd>C</kbd> center wheel · <kbd>R</kbd> reset car · <kbd>F</kbd> fit views</div>
+      <div><kbd>V</kbd> cycle views · <kbd>P</kbd> toggle projection mode · <kbd>H</kbd> cycle heatmap</div>
+      <div><kbd>Q</kbd> <kbd>E</kbd> rotate car in place (placement only)</div>
+      <div><kbd>Space</kbd> play / pause replay · <kbd>Esc</kbd> back to live · <kbd>Enter</kbd> continue from here</div>
+      <div>Timeline: click or drag on the plot to scrub. A ghost car shows that moment; the driver view follows it.</div>
+      <div>Top view: drag the car to place it, drag elsewhere to pan, scroll or pinch to zoom. Driver view: scroll or pinch to zoom; the blue "T" compass points along the target direction of the scene.</div>
+    </div>
+    <h2>Model notes</h2>
+    <div class="note">
+      Kinematic bicycle model around the rear axle, no tire slip, walking speed. Max wheel angle is derived from the curb to curb turning circle and track width.
+      Height is ignored, so curbs count as walls even though a bumper could overhang a low one.
+      The heatmap search uses a 0.15 m by 3° lattice with 0.5 m steps and five steering levels, so very tight gaps can be missed by a few centimetres.
+    </div>
+  </aside>
+  <main id="stage">
+   <div id="views">
+    <div class="pane" id="paneTop"><canvas id="cv"></canvas><div class="ptitle">Top view · world fixed</div></div>
+    <div class="pane" id="paneEgo"><canvas id="cv2"></canvas><div class="ptitle">Driver view · car fixed, heading up</div></div>
+    <div id="hud"></div>
+    <div id="legend">
+      <span style="--c:#1f9d6b">forward projection</span>
+      <span style="--c:#c7781a">reverse projection</span>
+      <span style="--c:#cf3f3f">contact / overlap</span>
+      <span style="--c:#8e44ad">replay ghost / reach path</span>
+      <span style="--c:#d6336c">planned manoeuvre</span>
+      <span class="sq" style="--c:linear-gradient(90deg,#0b7a75,#7fb7e6)">reachable (near to far)</span>
+    </div>
+    <button id="toggle">Settings</button>
+    <div id="pad">
+      <button data-k="fine" class="fine">fine</button>
+      <button data-k="fwd">▲</button>
+      <button data-k="center" class="fine">center</button>
+      <button data-k="left">◀</button>
+      <button data-k="back">▼</button>
+      <button data-k="right">▶</button>
+    </div>
+    <div id="card"><h3 id="cardTitle">Manoeuvre steps</h3><div id="cardBody"></div></div>
+   </div>
+   <div id="timeline">
+    <div id="tlbar">
+      <button id="tStart" title="Go to start">⏮</button>
+      <button id="tPlay" title="Play / pause (Space)">▶ Play</button>
+      <select id="tRate" title="Playback speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+      <select id="tAxis" title="X axis"><option value="s">Distance</option><option value="t">Time</option></select>
+      <button id="tCont" title="Put the car at the playhead and keep driving from there (Enter)">Continue from here</button>
+      <button id="tLive" title="Leave replay (Esc)">Back to live</button>
+      <select id="tTrack" title="Which trajectory the timeline shows"><option value="drive">My drive</option><option value="plan">Plan</option></select>
+      <button id="tPlan" title="Plan a manoeuvre from the current position">Plan</button>
+      <button id="tCard">Steps</button>
+      <button id="tFold" title="Show or hide the plot">▾</button>
+      <span id="tlread"></span>
+    </div>
+    <canvas id="tlcv"></canvas>
+   </div>
+  </main>
+</div>
+<script type="module" src="./src/main.ts"></script>
+</body>
+</html>
