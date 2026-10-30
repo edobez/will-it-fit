@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Garage fit simulator v4</title>
+<title>Garage fit simulator v5</title>
 <style>
   :root {
     --bg: #f4f2ee; --panel: #ffffff; --ink: #1d2128; --muted: #6b7280; --line: #e3e0da;
@@ -98,7 +98,7 @@
 <div id="app">
   <aside id="panel">
     <h1>Garage fit simulator</h1>
-    <div class="sub">v4 · recording, timeline and manoeuvre steps</div>
+    <div class="sub">v5 · manoeuvre planner</div>
 
     <h2>Scenario</h2>
     <div class="row sel"><label for="scenario">Scenario</label><select id="scenario"></select></div>
@@ -121,6 +121,16 @@
       <select id="reachMode"><option value="off">Off</option><option value="fwd">Forward only</option><option value="rev">Reverse only</option></select></div>
     <div id="reachFields"></div>
     <div class="note">Every position the car's center can reach in one move without changing direction, with any steering along the way. Color shows the distance driven. Recomputed whenever the car stops.</div>
+
+    <h2>Planner</h2>
+    <div class="row sel"><label for="planOrient">Final orientation</label>
+      <select id="planOrient"><option value="any">Any</option><option value="fwd">Forwards (nose in)</option><option value="rev">Backwards (reversed in)</option></select></div>
+    <div class="row sel"><label for="planRes">Search resolution</label>
+      <select id="planRes"><option value="normal">Normal</option><option value="fine">Fine (slower, tighter gaps)</option></select></div>
+    <div id="planFields"></div>
+    <div class="btns"><button id="bPlan">Plan from current position</button><button id="bPlanCancel">Cancel</button></div>
+    <div class="note" id="planStatus" style="margin-top:6px"></div>
+    <div class="note" style="margin-top:6px">Forwards means the front points into the space (garage, bays) or the same way as the parked cars (parallel). Penalties are in metres of driving: a direction change costing 4 m means the planner prefers 4 m of extra driving over one more change.</div>
 
     <h2>View</h2>
     <div class="row sel"><label for="viewMode">Views</label>
@@ -161,7 +171,8 @@
       <span style="--c:#1f9d6b">forward projection</span>
       <span style="--c:#c7781a">reverse projection</span>
       <span style="--c:#cf3f3f">contact / overlap</span>
-      <span style="--c:#8e44ad">path into the space</span>
+      <span style="--c:#8e44ad">replay ghost / reach path</span>
+      <span style="--c:#d6336c">planned manoeuvre</span>
       <span class="sq" style="--c:linear-gradient(90deg,#0b7a75,#7fb7e6)">reachable (near to far)</span>
     </div>
     <button id="toggle">Settings</button>
@@ -173,7 +184,7 @@
       <button data-k="back">▼</button>
       <button data-k="right">▶</button>
     </div>
-    <div id="card"><h3>Manoeuvre steps</h3><div id="cardBody"></div></div>
+    <div id="card"><h3 id="cardTitle">Manoeuvre steps</h3><div id="cardBody"></div></div>
    </div>
    <div id="timeline">
     <div id="tlbar">
@@ -183,6 +194,8 @@
       <select id="tAxis" title="X axis"><option value="s">Distance</option><option value="t">Time</option></select>
       <button id="tCont" title="Put the car at the playhead and keep driving from there (Enter)">Continue from here</button>
       <button id="tLive" title="Leave replay (Esc)">Back to live</button>
+      <select id="tTrack" title="Which trajectory the timeline shows"><option value="drive">My drive</option><option value="plan">Plan</option></select>
+      <button id="tPlan" title="Plan a manoeuvre from the current position">Plan</button>
       <button id="tCard">Steps</button>
       <button id="tFold" title="Show or hide the plot">▾</button>
       <span id="tlread"></span>
@@ -219,9 +232,19 @@ const SIM_SCHEMA = [
 const REACH_SCHEMA = [
   { k: "reachHorizon", label: "Max distance driven", unit: "m", v: 14, step: 1 },
 ];
+const PLAN_SCHEMA = [
+  { k: "planMargin", label: "Safety margin around the car", unit: "m", v: 0.10, step: 0.01 },
+  { k: "planDirPenalty", label: "Cost of a direction change", unit: "m", v: 4, step: 0.5 },
+  { k: "planStopPenalty", label: "Cost of stopping to steer", unit: "m", v: 1.5, step: 0.25 },
+  { k: "planSteerCost", label: "Cost of steering while moving, per full lock", unit: "m", v: 1.5, step: 0.25 },
+  { k: "planRevFactor", label: "Reverse distance factor", unit: "×", v: 1.2, step: 0.05 },
+  { k: "planClrWeight", label: "Prefer clearance (0 = off)", unit: "", v: 1, step: 0.25 },
+  { k: "planSoftClr", label: "Clearance considered comfortable", unit: "m", v: 0.3, step: 0.05 },
+  { k: "planTime", label: "Time limit", unit: "s", v: 30, step: 5 },
+];
 const GLOBAL_DEFAULTS = {
   mirrorsFolded: false, showCorners: true, showMirrorPaths: false, follow: false,
-  viewMode: "both", projMode: "pass", reachMode: "off", scenario: "garage", tlAxis: "s",
+  viewMode: "both", projMode: "pass", reachMode: "off", scenario: "garage", tlAxis: "s", planOrient: "any", planRes: "normal",
 };
 
 const PARKED = [
@@ -300,7 +323,7 @@ const STORE_KEY = "garageSim.v3";
 const P = {};   // global params
 const PS = {};  // per scenario params
 function setDefaults() {
-  [...CAR_SCHEMA, ...SIM_SCHEMA, ...REACH_SCHEMA].forEach(s => P[s.k] = s.v);
+  [...CAR_SCHEMA, ...SIM_SCHEMA, ...REACH_SCHEMA, ...PLAN_SCHEMA].forEach(s => P[s.k] = s.v);
   Object.assign(P, GLOBAL_DEFAULTS);
   for (const id in SCENARIOS) { PS[id] = {}; SCENARIOS[id].schema.forEach(s => PS[id][s.k] = s.v); }
 }
@@ -347,9 +370,14 @@ function buildPanel() {
   buildRows(document.getElementById("carFields"), CAR_SCHEMA, P, onParamsChanged);
   buildRows(document.getElementById("simFields"), SIM_SCHEMA, P, onParamsChanged);
   buildRows(document.getElementById("reachFields"), REACH_SCHEMA, P, onParamsChanged);
+  buildRows(document.getElementById("planFields"), PLAN_SCHEMA, P, save);
   for (const k of ["mirrorsFolded", "showCorners", "showMirrorPaths", "follow"]) {
     const el = document.getElementById(k); el.checked = !!P[k];
     el.onchange = () => { P[k] = el.checked; onParamsChanged(); };
+  }
+  for (const k of ["planOrient", "planRes"]) {
+    const el = document.getElementById(k); el.value = P[k];
+    el.onchange = () => { P[k] = el.value; save(); };
   }
   for (const k of ["projMode", "reachMode", "viewMode"]) {
     const el = document.getElementById(k); el.value = P[k];
@@ -396,7 +424,15 @@ function partsLocal() {
   }
   return parts;
 }
-function partsWorld(p) { return partsLocal().map(poly => poly.map(([x, y]) => toWorld(p, x, y))); }
+function wheelsLocal() {
+  const wl = 0.72, ww = 0.26, c = D.trackHalf - 0.11;
+  return [[0, c], [0, -c], [D.wb, c], [D.wb, -c]].map(([x, y]) => [[x - wl / 2, y - ww / 2], [x + wl / 2, y - ww / 2], [x + wl / 2, y + ww / 2], [x - wl / 2, y + ww / 2]]);
+}
+function partsWorld(p) {
+  const r = partsLocal().map(poly => poly.map(([x, y]) => toWorld(p, x, y)));
+  r.wheels = wheelsLocal().map(poly => poly.map(([x, y]) => toWorld(p, x, y)));
+  return r;
+}
 function centerLocal() { return [(D.xf - D.ro) / 2, 0]; }
 
 // =====================================================================
@@ -440,7 +476,7 @@ function buildGarage(sp) {
     ],
     bounds: [-1, -1, L + 1, gy1 + 1],
     start: { x: 2 + D.ro, y: Wt * 0.5, th: 0 },
-    targetDir: Math.PI / 2,
+    targetDir: Math.PI / 2, noseDir: Math.PI / 2,
   };
 }
 
@@ -460,14 +496,14 @@ function buildParallelStreet(sp) {
     floor: [rect(0, 0, L, yTop)],
     obstacles,
     lines: [[[0, Wa], [L, Wa]]],
-    target: { kind: "rect", poly: rect(xs, Wa, xs + S_, yTop), rect: { x0: xs, y0: Wa, x1: xs + S_, y1: yTop }, backSide: "y1" },
+    target: { kind: "rect", poly: rect(xs, Wa, xs + S_, yTop + 0.3), rect: { x0: xs, y0: Wa, x1: xs + S_, y1: yTop }, backSide: "y1" },
     labels: [
       { text: `gap ${S_.toFixed(2)} m`, x: xs + S_ / 2, y: Wa + dep / 2, color: "#2f6fb3" },
       { text: `road ${Wa.toFixed(2)} m`, x: 1.0, y: Wa / 2, align: "left", color: "#6b7280" },
     ],
     bounds: [-1, -1.5, L + 1, yTop + 1.5],
     start: { x: 2 + D.ro, y: Math.max(D.w2 + 0.3, Wa - 0.8 - D.w2), th: 0 },
-    targetDir: Math.PI / 2,
+    targetDir: Math.PI / 2, noseDir: 0,
   };
 }
 
@@ -503,7 +539,7 @@ function buildParallelUnderground(sp) {
     ],
     bounds: [-1, -1, L + 1, yTop + 1],
     start: { x: 2 + D.ro, y: Wa * 0.5, th: 0 },
-    targetDir: Math.PI / 2,
+    targetDir: Math.PI / 2, noseDir: 0,
   };
 }
 
@@ -553,13 +589,13 @@ function buildBays(sp) {
     ],
     bounds: [-1, -1, L + 1, yb + 1],
     start: { x: 2 + D.ro, y: Wa * 0.5, th: 0 },
-    targetDir: a,
+    targetDir: a, noseDir: a,
   };
 }
 
 function buildScene() {
   S = SCENARIOS[P.scenario].build(SP());
-  for (const o of S.obstacles) o.bb = bbox(o.poly);
+  for (const o of S.obstacles) { o.bb = bbox(o.poly); o.low = o.kind === "curb"; }
   sceneVersion++;
 }
 
@@ -585,10 +621,12 @@ function polysIntersect(a, b) {
   }
   return true;
 }
+// Low obstacles (curbs) only collide with the wheels: bumpers and mirrors overhang them.
 function collidesParts(parts) {
-  for (const pp of parts) {
-    const bb = bbox(pp);
-    for (const o of S.obstacles) if (bbOverlap(bb, o.bb) && polysIntersect(pp, o.poly)) return true;
+  const bbs = parts.map(bbox), wh = parts.wheels || [], wbbs = wh.map(bbox);
+  for (const o of S.obstacles) {
+    const set = o.low ? wh : parts, sb = o.low ? wbbs : bbs;
+    for (let i = 0; i < set.length; i++) if (bbOverlap(sb[i], o.bb) && polysIntersect(set[i], o.poly)) return true;
   }
   return false;
 }
@@ -604,6 +642,7 @@ function pointInPoly(pt, poly) {
 function pointInObstacle(pt) {
   for (const o of S.obstacles) {
     const b = o.bb;
+    if (o.low) continue;
     if (pt[0] > b[0] && pt[0] < b[2] && pt[1] > b[1] && pt[1] < b[3] && pointInPoly(pt, o.poly)) return true;
   }
   return false;
@@ -627,16 +666,21 @@ function polyDistance(a, b) {
 }
 function clearance(parts, pose) {
   let best = { d: Infinity, pi: -1 };
-  for (let pi = 0; pi < parts.length; pi++) for (const o of S.obstacles) {
-    const pp = parts[pi];
-    if (polysIntersect(pp, o.poly)) return { d: 0, p: null, q: null, part: "contact" };
-    const r = polyDistance(pp, o.poly);
-    if (r.d < best.d) best = { ...r, pi };
+  const wh = parts.wheels || [];
+  for (const o of S.obstacles) {
+    const set = o.low ? wh : parts, off = o.low ? 10 : 0;
+    for (let k = 0; k < set.length; k++) {
+      const pp = set[k];
+      if (polysIntersect(pp, o.poly)) return { d: 0, p: null, q: null, part: "contact" };
+      const r = polyDistance(pp, o.poly);
+      if (r.d < best.d) best = { ...r, pi: k + off };
+    }
   }
   best.part = best.pi >= 0 && pose ? partLabel(best.pi, best.p, pose) : "";
   return best;
 }
 function partLabel(pi, pt, pose) {
+  if (pi >= 10) return ["rear left wheel", "rear right wheel", "front left wheel", "front right wheel"][pi - 10];
   if (pi === 1) return "left mirror";
   if (pi === 2) return "right mirror";
   const c = Math.cos(pose.th), s = Math.sin(pose.th), dx = pt[0] - pose.x, dy = pt[1] - pose.y;
@@ -716,6 +760,7 @@ function update(dt) {
   if (steer) st.delta = clamp(st.delta + steer * P.steerRate * DEG * fine * dt, -D.dmax, D.dmax);
   const mv = (input.fwd ? 1 : 0) - (input.back ? 1 : 0);
   if ((mv || steer) && TL.head !== null) tlLive();
+  if ((mv || steer) && TL.track === "plan") setTrack("drive");
   st.moving = false;
   if (mv) {
     let dist = Math.max(0, P.speed) * fine * dt;
@@ -1070,7 +1115,7 @@ function updateHud(colliding, cl, fwd, rev, parts) {
       } else {
         status = `<span class="good">Inside the slot</span><br>` +
           `<span class="k">slot ends</span> rear ${fmtM(minX - r.x0)} · front ${fmtM(r.x1 - maxX)}<br>` +
-          `<span class="k">to curb/wall side</span> ${fmtM(r.y1 - maxY)}`;
+          `<span class="k">to curb/wall side</span> ${r.y1 - maxY >= 0 ? fmtM(r.y1 - maxY) : "overhangs " + fmtM(maxY - r.y1)}`;
       }
     } else status = '<span class="good">Inside the bay lines</span>';
   } else if (inCount > 0) status = '<span class="warn">Partly in the space</span>';
@@ -1168,6 +1213,7 @@ function applyViewMode() {
 }
 function onParamsChanged() {
   derive(); buildScene();
+  if (PLAN.samples && !planValid()) planStatus("The scene or car changed: the plan shown dashed is out of date. Plan again.");
   st.delta = clamp(st.delta, -D.dmax, D.dmax);
   save();
 }
@@ -1202,8 +1248,9 @@ function recFrame() {
   REC.version++;
 }
 const xOf = smp => P.tlAxis === "t" ? smp.t : smp.s;
+function trk() { return TL.track === "plan" && PLAN.samples ? PLAN.samples : REC.samples; }
 function sampleAt(x) {
-  const a = REC.samples;
+  const a = trk();
   if (!a.length) return null;
   let lo = 0, hi = a.length - 1;
   if (x <= xOf(a[0])) return { ...a[0], idx: 0 };
@@ -1224,11 +1271,11 @@ function recountGears() {
 // =====================================================================
 // Timeline: replay, scrub, continue from here
 // =====================================================================
-const TL = { head: null, playing: false, rate: 1, collapsed: false, card: false };
+const TL = { head: null, playing: false, rate: 1, collapsed: false, card: false, track: "drive" };
 if (!P.tlAxis) P.tlAxis = "s";
-const recXMax = () => xOf(REC.samples[REC.samples.length - 1]);
+const recXMax = () => { const a = trk(); return a.length ? xOf(a[a.length - 1]) : 0; };
 function tlTogglePlay() {
-  if (REC.samples.length < 2) return;
+  if (trk().length < 2) return;
   if (TL.playing) { TL.playing = false; return; }
   if (TL.head === null || TL.head >= recXMax() - 1e-6) TL.head = 0;
   TL.playing = true;
@@ -1237,6 +1284,12 @@ function tlLive() { TL.head = null; TL.playing = false; }
 function tlContinue() {
   if (TL.head === null) return;
   const g = sampleAt(TL.head);
+  if (TL.track === "plan") {
+    st.pose = { x: g.x, y: g.y, th: g.th }; st.delta = g.delta;
+    st.driven = 0; st.gearChanges = 0; st.lastDir = 0;
+    recStart(); setTrack("drive");
+    return;
+  }
   const keep = REC.samples.slice(0, g.idx + 1);
   if (xOf(g) > xOf(keep[keep.length - 1]) + 1e-9) {
     const { idx, f, ...rest } = g; keep.push(rest);
@@ -1254,7 +1307,7 @@ function tlAdvance(dt) {
   TL.head += dt * TL.rate * v;
   if (TL.head >= recXMax()) { TL.head = recXMax(); TL.playing = false; }
 }
-document.getElementById("tStart").onclick = () => { if (REC.samples.length > 1) { TL.head = 0; TL.playing = false; } };
+document.getElementById("tStart").onclick = () => { if (trk().length > 1) { TL.head = 0; TL.playing = false; } };
 document.getElementById("tPlay").onclick = () => tlTogglePlay();
 document.getElementById("tRate").onchange = e => { TL.rate = parseFloat(e.target.value); e.target.blur(); };
 const tAxis = document.getElementById("tAxis");
@@ -1276,14 +1329,15 @@ document.getElementById("tFold").onclick = e => {
 // ---------- trail and ghost in the views ----------
 function drawTrail(ghost) {
   const a = REC.samples;
-  if (a.length < 2) return;
+  if (a.length < 2 && !ghost) return;
   ctx.save(); ctx.lineWidth = 1.5; ctx.setLineDash([2, 3]);
   ctx.strokeStyle = "rgba(60,60,60,.45)";
   ctx.beginPath(); a.forEach((p, i) => i ? ctx.lineTo(...P2(p.cx, p.cy)) : ctx.moveTo(...P2(p.cx, p.cy))); ctx.stroke();
   if (ghost) {
+    const b = trk();
     ctx.setLineDash([]); ctx.lineWidth = 3; ctx.strokeStyle = "rgba(142,68,173,.55)";
     ctx.beginPath();
-    for (let i = 0; i <= ghost.idx; i++) { const p = a[i]; i ? ctx.lineTo(...P2(p.cx, p.cy)) : ctx.moveTo(...P2(p.cx, p.cy)); }
+    for (let i = 0; i <= ghost.idx; i++) { const p = b[i]; i ? ctx.lineTo(...P2(p.cx, p.cy)) : ctx.moveTo(...P2(p.cx, p.cy)); }
     ctx.lineTo(...P2(ghost.cx, ghost.cy)); ctx.stroke();
   }
   ctx.restore();
@@ -1329,7 +1383,8 @@ function drawTimeline(ghost) {
   const read = document.getElementById("tlread");
   if (ghost) {
     read.textContent = `@ ${fmtM(ghost.s)} · ${ghost.t.toFixed(1)} s · wheel ${steerText(ghost.delta)} · clearance ${ghost.clr >= 1 ? "> 1 m" : (ghost.clr * 100).toFixed(0) + " cm"}${ghost.part ? " (" + ghost.part + ")" : ""}`;
-  } else read.textContent = `live · recorded ${fmtM(st.driven)} · ${st.gearChanges} direction changes`;
+  } else if (TL.track === "plan" && PLAN.samples) read.textContent = `plan · ${PLAN.summary}`;
+  else read.textContent = `live · recorded ${fmtM(st.driven)} · ${st.gearChanges} direction changes`;
   document.getElementById("tPlay").textContent = TL.playing ? "❚❚ Pause" : "▶ Play";
   document.getElementById("tPlay").classList.toggle("on", TL.playing);
   document.getElementById("tLive").disabled = TL.head === null;
@@ -1340,7 +1395,7 @@ function drawTimeline(ghost) {
     tlcv.width = Math.round(tlcv.clientWidth * dpr); tlcv.height = Math.round(tlcv.clientHeight * dpr);
   }
   const c = tctx; c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const G = tlGeom(), a = REC.samples;
+  const G = tlGeom(), a = trk();
   c.clearRect(0, 0, G.w, G.h);
   c.font = "10.5px system-ui, sans-serif"; c.textBaseline = "middle";
   const x0 = TLM.L, x1 = G.w - TLM.R;
@@ -1415,7 +1470,7 @@ function drawTimeline(ghost) {
     }
   } else {
     c.fillStyle = "#6b7280"; c.textAlign = "center";
-    c.fillText("Drive to record a manoeuvre. Click or drag here afterwards to replay it.", (x0 + x1) / 2, G.s0 + G.ph);
+    c.fillText(TL.track === "plan" ? "No plan yet. Press Plan to compute one from the current position." : "Drive to record a manoeuvre. Click or drag here afterwards to replay it.", (x0 + x1) / 2, G.s0 + G.ph);
   }
   // panel titles
   c.textAlign = "left"; c.fillStyle = "#6b7280";
@@ -1439,7 +1494,7 @@ function drawTimeline(ghost) {
 (() => {
   let dragging = false;
   const scrub = e => {
-    if (REC.samples.length < 2) return;
+    if (trk().length < 2) return;
     const G = tlGeom();
     TL.head = clamp(G.Xinv(e.offsetX), 0, recXMax()); TL.playing = false;
   };
@@ -1497,14 +1552,17 @@ function buildSteps() {
 function updateCard(ghost) {
   if (!TL.card) return;
   const body = document.getElementById("cardBody");
-  if (cardVersion !== REC.version || cardSteps.axis !== P.tlAxis) {
-    cardVersion = REC.version;
-    cardSteps = buildSteps(); cardSteps.axis = P.tlAxis;
+  const ver = TL.track === "plan" && PLAN.samples ? "p" + PLAN.version : "d" + REC.version;
+  if (cardVersion !== ver || cardSteps.axis !== P.tlAxis) {
+    cardVersion = ver;
+    const isPlan = ver[0] === "p";
+    document.getElementById("cardTitle").textContent = isPlan ? "Planned manoeuvre" : "Your drive";
+    cardSteps = isPlan ? planStepsForAxis() : buildSteps(); cardSteps.axis = P.tlAxis;
     const moves = cardSteps.filter(s_ => s_.kind === "move");
     const changes = moves.reduce((n, m, i) => n + (i && m.dir !== moves[i - 1].dir ? 1 : 0), 0);
     body.innerHTML = cardSteps.length
       ? `<div class="note" style="margin-bottom:6px">${moves.length} moves, ${changes} direction changes, ${fmtM(moves.reduce((n, m) => n + m.len, 0))} driven. Click a step to jump there.</div><ol>${cardSteps.map(s_ => `<li>${s_.text}</li>`).join("")}</ol>`
-      : `<div class="note">Nothing recorded yet. Drive the car and the steps appear here.</div>`;
+      : `<div class="note">${TL.track === "plan" ? "No plan yet, or the car is already inside the space." : "Nothing recorded yet. Drive the car and the steps appear here."}</div>`;
     cardEls = [...body.querySelectorAll("li")];
     cardEls.forEach((li, k) => li.onclick = () => { TL.head = cardSteps[k].x0; TL.playing = false; });
   }
@@ -1513,6 +1571,396 @@ function updateCard(ghost) {
     const s_ = cardSteps[k];
     li.classList.toggle("cur", hx !== null && hx >= s_.x0 - 1e-9 && (hx < s_.x1 || (k === cardSteps.length - 1 && hx <= s_.x1 + 1e-9)));
   });
+}
+
+
+// =====================================================================
+// Planner: Hybrid A* in a Web Worker
+// State (x, y, heading, direction) on a lattice; motion primitives are arcs at a few
+// steering levels, forward and reverse. Costs: distance (reverse weighted), direction
+// changes, stopping to steer, small steering changes while moving, and a soft penalty
+// for being closer than a comfortable clearance. A 2D distance-to-goal grid around the
+// obstacles is the heuristic. The goal is a region: the whole car inside the space,
+// optionally with an orientation constraint.
+// =====================================================================
+function plannerWorker() {
+  function stepPose(p, ds, delta, wb) {
+    if (Math.abs(delta) < 1e-6) return { x: p.x + Math.cos(p.th) * ds, y: p.y + Math.sin(p.th) * ds, th: p.th };
+    const R = wb / Math.tan(delta), th2 = p.th + ds / R;
+    return { x: p.x + R * (Math.sin(th2) - Math.sin(p.th)), y: p.y - R * (Math.cos(th2) - Math.cos(p.th)), th: th2 };
+  }
+  function bbox(poly) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of poly) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    return [x0, y0, x1, y1];
+  }
+  function polysIntersect(a, b) {
+    for (const poly of [a, b]) {
+      for (let i = 0; i < poly.length; i++) {
+        const p = poly[i], q = poly[(i + 1) % poly.length];
+        const nx = q[1] - p[1], ny = p[0] - q[0];
+        let amin = Infinity, amax = -Infinity, bmin = Infinity, bmax = -Infinity;
+        for (const v of a) { const d = v[0] * nx + v[1] * ny; if (d < amin) amin = d; if (d > amax) amax = d; }
+        for (const v of b) { const d = v[0] * nx + v[1] * ny; if (d < bmin) bmin = d; if (d > bmax) bmax = d; }
+        if (amax <= bmin + 1e-9 || bmax <= amin + 1e-9) return false;
+      }
+    }
+    return true;
+  }
+  function pointInPoly(x, y, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function segDist(px, py, a, b) {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    let t = ((px - a[0]) * dx + (py - a[1]) * dy) / (dx * dx + dy * dy || 1);
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - a[0] - t * dx, py - a[1] - t * dy);
+  }
+  // binary min-heap on f
+  function Heap() { this.f = []; this.i = []; }
+  Heap.prototype.push = function (f, i) {
+    const F = this.f, I = this.i; let k = F.length; F.push(f); I.push(i);
+    while (k > 0) { const p = (k - 1) >> 1; if (F[p] <= F[k]) break; [F[p], F[k]] = [F[k], F[p]]; [I[p], I[k]] = [I[k], I[p]]; k = p; }
+  };
+  Heap.prototype.pop = function () {
+    const F = this.f, I = this.i, top = I[0]; this.topF = F[0]; const lf = F.pop(), li = I.pop();
+    if (F.length) {
+      F[0] = lf; I[0] = li; let k = 0;
+      for (;;) {
+        const l = 2 * k + 1, r = l + 1; let m = k;
+        if (l < F.length && F[l] < F[m]) m = l;
+        if (r < F.length && F[r] < F[m]) m = r;
+        if (m === k) break;
+        [F[m], F[k]] = [F[k], F[m]]; [I[m], I[k]] = [I[k], I[m]]; k = m;
+      }
+    }
+    return top;
+  };
+  Heap.prototype.size = function () { return this.f.length; };
+
+  self.onmessage = e => { try { run(e.data); } catch (err) { self.postMessage({ type: "fail", reason: "Planner error: " + err.message }); } };
+
+  function run(msg) {
+    const t0 = Date.now();
+    const { car, target, bounds, start, startDelta, opts } = msg;
+    const wb = car.wb, dmax = car.dmax, m = opts.margin;
+    const OBS = msg.obstacles.map(o => ({ poly: o.poly, low: o.low, bb: bbox(o.poly) }));
+    const tw = (p, lx, ly) => { const c = Math.cos(p.th), s = Math.sin(p.th); return [p.x + c * lx - s * ly, p.y + s * lx + c * ly]; };
+    function partsLocal(inf) {
+      const parts = [[[-car.ro - inf, -car.w2 - inf], [car.xf + inf, -car.w2 - inf], [car.xf + inf, car.w2 + inf], [-car.ro - inf, car.w2 + inf]]];
+      if (car.mw2 > car.w2 + 0.005) {
+        const a = car.mx - 0.12 - inf, b = car.mx + 0.12 + inf;
+        parts.push([[a, car.w2 - 0.02], [b, car.w2 - 0.02], [b, car.mw2 + inf], [a, car.mw2 + inf]]);
+        parts.push([[a, -car.mw2 - inf], [b, -car.mw2 - inf], [b, -car.w2 + 0.02], [a, -car.w2 + 0.02]]);
+      }
+      return parts;
+    }
+    const PL = partsLocal(m), PR = partsLocal(0);
+    const wc = car.trackHalf - 0.11, wl = 0.72 / 2 + m, ww = 0.26 / 2 + m;
+    const WL = [[0, wc], [0, -wc], [wb, wc], [wb, -wc]].map(([x, y]) => [[x - wl, y - ww], [x + wl, y - ww], [x + wl, y + ww], [x - wl, y + ww]]);
+    const wheelHalf = wc + 0.13;
+    function collides(p) {
+      for (const [set, low] of [[PL, false], [WL, true]]) for (const lp of set) {
+        const wp = lp.map(v => tw(p, v[0], v[1])), bb = bbox(wp);
+        for (const o of OBS) if (o.low === low && bb[0] < o.bb[2] && o.bb[0] < bb[2] && bb[1] < o.bb[3] && o.bb[1] < bb[3] && polysIntersect(wp, o.poly)) return true;
+      }
+      return false;
+    }
+    const cosLim = 0.5;
+    function isGoal(p) {
+      if (opts.orient !== "any") {
+        const c = Math.cos(p.th - target.noseDir);
+        if (opts.orient === "fwd" && c < cosLim) return false;
+        if (opts.orient === "rev" && c > -cosLim) return false;
+      }
+      for (const lp of PR) for (const v of lp) { const w = tw(p, v[0], v[1]); if (!pointInPoly(w[0], w[1], target.poly)) return false; }
+      return true;
+    }
+
+    // ---- distance field and 2D heuristic on a 0.1 m grid ----
+    const g = 0.1, bx0 = bounds[0], by0 = bounds[1], nx = Math.ceil((bounds[2] - bx0) / g), ny = Math.ceil((bounds[3] - by0) / g);
+    // df: distance to tall obstacles (body and mirrors), dl: distance to low ones (wheels only)
+    const df = new Float32Array(nx * ny), dlo = new Float32Array(nx * ny);
+    for (let iy = 0; iy < ny; iy++) for (let ix = 0; ix < nx; ix++) {
+      const px = bx0 + (ix + 0.5) * g, py = by0 + (iy + 0.5) * g;
+      for (const low of [false, true]) {
+        let best = Infinity;
+        for (const o of OBS) {
+          if (o.low !== low) continue;
+          const b = o.bb, ddx = Math.max(b[0] - px, 0, px - b[2]), ddy = Math.max(b[1] - py, 0, py - b[3]);
+          if (Math.hypot(ddx, ddy) >= best) continue;
+          if (ddx === 0 && ddy === 0 && pointInPoly(px, py, o.poly)) { best = 0; break; }
+          for (let i = 0; i < o.poly.length; i++) best = Math.min(best, segDist(px, py, o.poly[i], o.poly[(i + 1) % o.poly.length]));
+        }
+        (low ? dlo : df)[iy * nx + ix] = best;
+      }
+    }
+    const dfAt = (x, y) => {
+      const ix = Math.floor((x - bx0) / g), iy = Math.floor((y - by0) / g);
+      return ix < 0 || iy < 0 || ix >= nx || iy >= ny ? 0 : df[iy * nx + ix];
+    };
+    const passMin = car.w2 + m - 0.07;   // the car's center can never be closer than half its width to an obstacle
+    const passLow = wheelHalf + m - 0.07;
+    const passable = k => df[k] >= passMin && dlo[k] >= passLow;
+    const hg = new Float64Array(nx * ny).fill(Infinity);
+    const hh = new Heap();
+    for (let iy = 0; iy < ny; iy++) for (let ix = 0; ix < nx; ix++) {
+      const k = iy * nx + ix;
+      if (passable(k) && pointInPoly(bx0 + (ix + 0.5) * g, by0 + (iy + 0.5) * g, target.poly)) { hg[k] = 0; hh.push(0, k); }
+    }
+    const NB = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]];
+    while (hh.size()) {
+      const k = hh.pop(), ix = k % nx, iy = (k - ix) / nx, d0 = hg[k];
+      if (hh.topF > d0 + 1e-12) continue;   // stale entry
+      for (const [ddx, ddy, w] of NB) {
+        const jx = ix + ddx, jy = iy + ddy;
+        if (jx < 0 || jy < 0 || jx >= nx || jy >= ny) continue;
+        const j = jy * nx + jx;
+        if (!passable(j)) continue;
+        const nd = d0 + w * g;
+        if (nd < hg[j]) { hg[j] = nd; hh.push(nd, j); }
+      }
+    }
+    const ccx = (car.xf - car.ro) / 2;
+    const hAt = p => {
+      const c = tw(p, ccx, 0), ix = Math.floor((c[0] - bx0) / g), iy = Math.floor((c[1] - by0) / g);
+      return ix < 0 || iy < 0 || ix >= nx || iy >= ny ? Infinity : hg[iy * nx + ix];
+    };
+    // points used for the soft clearance cost
+    const CP = [[-car.ro, -car.w2], [car.xf, -car.w2], [car.xf, car.w2], [-car.ro, car.w2], [car.wb / 2, car.w2], [car.wb / 2, -car.w2]];
+    if (car.mw2 > car.w2 + 0.005) CP.push([car.mx, car.mw2], [car.mx, -car.mw2]);
+    const clrCost = p => {
+      if (opts.clrWeight <= 0) return 0;
+      let c = 0;
+      for (const v of CP) { const w = tw(p, v[0], v[1]); const d = dfAt(w[0], w[1]); if (d < opts.softClr) c += (opts.softClr - d) / opts.softClr; }
+      return opts.clrWeight * c / CP.length;
+    };
+
+    // ---- search ----
+    const fine = opts.res === "fine";
+    const CELL = fine ? 0.1 : 0.15, NTH = fine ? 180 : 120, STEP = fine ? 0.3 : 0.5, SUB = fine ? 3 : 4;
+    const LV = (fine ? [-1, -2 / 3, -1 / 3, 0, 1 / 3, 2 / 3, 1] : [-1, -0.5, 0, 0.5, 1]).map(f => f * dmax);
+    const HW = 1.4;   // weighted A*: much faster, slightly suboptimal
+    const keyOf = (p, dir) => {
+      const ix = Math.round(p.x / CELL) + 5000, iy = Math.round(p.y / CELL) + 5000;
+      const it = ((Math.round(p.th / (2 * Math.PI / NTH)) % NTH) + NTH) % NTH;
+      return ((ix * 10000 + iy) * NTH + it) * 3 + (dir > 0 ? 1 : dir < 0 ? 2 : 0);
+    };
+    const X = [], Y = [], TH = [], G = [], PAR = [], DIR = [], LVI = [], LEN = [], GOAL = [];
+    const add = (p, gg, par, dir, lvi, len, goal) => { X.push(p.x); Y.push(p.y); TH.push(p.th); G.push(gg); PAR.push(par); DIR.push(dir); LVI.push(lvi); LEN.push(len); GOAL.push(goal); return X.length - 1; };
+    const done = (i, expanded) => {
+      const prims = [];
+      for (let k = i; PAR[k] >= 0; k = PAR[k]) prims.push({ dir: DIR[k], lv: LVI[k], delta: LV[LVI[k]], len: LEN[k] });
+      prims.reverse();
+      self.postMessage({ type: "done", prims, expanded, ms: Date.now() - t0, cost: G[i], levels: LV.length });
+    };
+    if (collides(start)) {
+      self.postMessage({ type: "fail", reason: "The car is already closer to an obstacle than the safety margin. Move it a little or lower the margin." });
+      return;
+    }
+    if (isGoal(start)) { self.postMessage({ type: "done", prims: [], expanded: 0, ms: Date.now() - t0, cost: 0, levels: LV.length }); return; }
+    let lv0 = 0; LV.forEach((v, i) => { if (Math.abs(v - startDelta) < Math.abs(LV[lv0] - startDelta)) lv0 = i; });
+    const best = new Map();
+    const heap = new Heap();
+    const h0 = hAt(start);
+    if (!Number.isFinite(h0)) { self.postMessage({ type: "fail", reason: "The space is not reachable even ignoring the turning radius: something blocks every route, or the space is narrower than the car plus margin." }); return; }
+    const root = add(start, 0, -1, 0, lv0, 0, 0);
+    best.set(keyOf(start, 0), 0);
+    heap.push(HW * h0, root);
+    let expanded = 0, lastPost = Date.now();
+    const maxMs = opts.maxTime * 1000;
+    while (heap.size()) {
+      const i = heap.pop();
+      if (GOAL[i]) { done(i, expanded); return; }
+      const pose = { x: X[i], y: Y[i], th: TH[i] };
+      if (G[i] > (best.get(keyOf(pose, DIR[i])) ?? Infinity) + 1e-9) continue;
+      expanded++;
+      if ((expanded & 255) === 0) {
+        const now = Date.now();
+        if (now - t0 > maxMs) { self.postMessage({ type: "fail", reason: `No solution within the ${opts.maxTime} s time limit (${expanded} states explored). Try a smaller margin, the fine resolution, a longer limit, or another start position.` }); return; }
+        if (now - lastPost > 150) { lastPost = now; self.postMessage({ type: "progress", expanded, ms: now - t0, h: hAt(pose) }); }
+      }
+      const pd = DIR[i], pl = LVI[i];
+      for (const dir of [1, -1]) for (let li = 0; li < LV.length; li++) {
+        const dl = Math.abs(li - pl);
+        let cost;
+        if (pd === 0) cost = 0.05 * dl;                                      // at the start we are standing still
+        else if (pd !== dir) cost = opts.dirPenalty + 0.05 * dl;              // direction change: stop, any steering
+        else if (dl <= 1) cost = opts.steerCost * Math.abs(LV[li] - LV[pl]) / dmax;   // small steering change while moving
+        else cost = opts.stopPenalty + 0.05 * dl;                             // stop to turn the wheel a lot
+        const delta = LV[li], fac = dir < 0 ? opts.revFactor : 1;
+        const end = stepPose(pose, dir * STEP, delta, wb);
+        const gEnd = G[i] + cost + STEP * fac;
+        const k = keyOf(end, dir);
+        const bk = best.get(k);
+        if (bk !== undefined && bk <= gEnd) continue;
+        let ok = true, goalHit = 0, gp = null;
+        for (let s = 1; s <= SUB; s++) {
+          const p = s === SUB ? end : stepPose(pose, dir * STEP * s / SUB, delta, wb);
+          if (collides(p)) { ok = false; break; }
+          if (isGoal(p)) { goalHit = s; gp = p; break; }
+        }
+        if (goalHit) {
+          const len = STEP * goalHit / SUB;
+          const gg = G[i] + cost + len * fac;
+          heap.push(gg, add(gp, gg, i, dir, li, len, 1));
+          continue;
+        }
+        if (!ok) continue;
+        const h = hAt(end);
+        if (!Number.isFinite(h)) continue;
+        const gg = gEnd + STEP * clrCost(end);
+        if (bk !== undefined && bk <= gg) continue;
+        best.set(k, gg);
+        heap.push(gg + HW * h, add(end, gg, i, dir, li, STEP, 0));
+      }
+    }
+    self.postMessage({ type: "fail", reason: `No manoeuvre exists on this search lattice (${expanded} states explored). Try a smaller margin or the fine resolution.` });
+  }
+}
+
+const PLAN = { samples: null, steps: null, version: 0, worker: null, running: false, summary: "", sceneVersion: -1, dVersion: -1, ends: [] };
+const planStatus = msg => { document.getElementById("planStatus").innerHTML = msg; };
+function setTrack(t) { TL.track = t; document.getElementById("tTrack").value = t; TL.head = null; TL.playing = false; }
+document.getElementById("tTrack").onchange = e => { setTrack(e.target.value); e.target.blur(); };
+function planValid() { return PLAN.samples && PLAN.sceneVersion === sceneVersion && PLAN.dVersion === D.version; }
+function cancelPlan(msg) {
+  if (PLAN.worker) { PLAN.worker.terminate(); PLAN.worker = null; }
+  if (PLAN.running && msg) planStatus(msg);
+  PLAN.running = false;
+}
+function startPlan() {
+  cancelPlan();
+  let w;
+  try {
+    const src = `(${plannerWorker.toString()})()`;
+    w = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+  } catch (err) { planStatus(`<span style="color:var(--bad)">Could not start the planner worker: ${err.message}</span>`); return; }
+  PLAN.worker = w; PLAN.running = true;
+  const startPose = { ...st.pose }, startDelta = st.delta;
+  const sv = sceneVersion, dv = D.version;
+  planStatus("Preparing…");
+  w.onmessage = e => {
+    const r = e.data;
+    if (r.type === "progress") { planStatus(`Searching… ${r.expanded.toLocaleString()} states, ${(r.ms / 1000).toFixed(1)} s, ${Number.isFinite(r.h) ? r.h.toFixed(1) + " m from the space" : ""}`); return; }
+    PLAN.running = false; w.terminate(); PLAN.worker = null;
+    if (r.type === "fail") { planStatus(`<span style="color:var(--bad)">${r.reason}</span>`); return; }
+    if (!r.prims.length) { planStatus("The car is already inside the space with the requested orientation."); return; }
+    buildPlan(startPose, startDelta, r.prims, r.levels);
+    PLAN.sceneVersion = sv; PLAN.dVersion = dv;
+    planStatus(`<span style="color:var(--good)">Found:</span> ${PLAN.summary}. ${r.expanded.toLocaleString()} states in ${(r.ms / 1000).toFixed(1)} s.`);
+    setTrack("plan"); TL.head = 0;
+    TL.card = true; document.getElementById("card").classList.add("open");
+  };
+  w.onerror = e => { PLAN.running = false; planStatus(`<span style="color:var(--bad)">Planner crashed: ${e.message}</span>`); };
+  w.postMessage({
+    obstacles: S.obstacles.map(o => ({ poly: o.poly, low: !!o.low })),
+    target: { poly: S.target.poly, noseDir: S.noseDir ?? S.targetDir ?? Math.PI / 2 },
+    bounds: S.bounds,
+    car: { wb: D.wb, ro: D.ro, xf: D.xf, w2: D.w2, mw2: D.mw2, mx: D.mx, dmax: D.dmax, trackHalf: D.trackHalf },
+    start: startPose, startDelta,
+    opts: { margin: Math.max(0, P.planMargin), dirPenalty: Math.max(0, P.planDirPenalty), stopPenalty: Math.max(0, P.planStopPenalty),
+      revFactor: Math.max(1, P.planRevFactor), steerCost: Math.max(0, P.planSteerCost ?? 1.5), clrWeight: Math.max(0, P.planClrWeight), softClr: Math.max(0.01, P.planSoftClr),
+      orient: P.planOrient, res: P.planRes, maxTime: Math.max(1, P.planTime) },
+  });
+}
+document.getElementById("bPlan").onclick = () => startPlan();
+document.getElementById("tPlan").onclick = () => startPlan();
+document.getElementById("bPlanCancel").onclick = () => cancelPlan("Cancelled.");
+
+// Convert primitives to the shared trajectory format and to driver instructions.
+function buildPlan(start, startDelta, prims, nLevels) {
+  // merge consecutive primitives with the same direction and steering
+  const runs = [];
+  for (const p of prims) {
+    const r = runs[runs.length - 1];
+    if (r && r.dir === p.dir && r.lv === p.lv) r.len += p.len;
+    else runs.push({ ...p });
+  }
+  const samples = [], steps = [], ends = [];
+  let pose = { ...start }, s = 0, t = 0, delta = startDelta, prevDir = 0, prevLv = null;
+  const speed = Math.max(0.2, P.speed);
+  const push = (dir) => {
+    const c = toWorld(pose, ...centerLocal()), cl = clearance(partsWorld(pose), pose);
+    samples.push({ s, t, x: pose.x, y: pose.y, th: pose.th, delta, dir, cx: c[0], cy: c[1], clr: cl.d, part: cl.part });
+  };
+  push(0);
+  let move = null;
+  const closeMove = () => { if (move) { move.i1 = samples.length - 1; steps.push(move); ends.push({ ...pose }); move = null; } };
+  for (const r of runs) {
+    const dirChange = prevDir !== 0 && r.dir !== prevDir;
+    const bigSteer = prevLv !== null && Math.abs(r.lv - prevLv) > 1;
+    const needStop = prevDir === 0 || dirChange || bigSteer;
+    if (needStop) {
+      closeMove();
+      if (Math.abs(r.delta - delta) > 1e-6) {
+        const i0 = samples.length - 1;
+        delta = r.delta; t += 1.0; push(0);
+        steps.push({ kind: "stop", i0, i1: samples.length - 1, text: prevDir === 0 ? `Before starting, turn the wheel to ${steerText(delta)}` : `Stop, turn the wheel to ${steerText(delta)}` });
+      }
+      move = { kind: "move", dir: r.dir, i0: samples.length - 1, phases: [] };
+    }
+    delta = r.delta;
+    move.phases.push({ delta: r.delta, len: r.len });
+    const n = Math.max(1, Math.ceil(r.len / 0.05)), runStart = { ...pose };
+    for (let k = 1; k <= n; k++) {
+      pose = stepPose(runStart, r.dir * r.len * k / n, r.delta);
+      s += r.len / n; t += r.len / n / speed;
+      push(r.dir);
+    }
+    prevDir = r.dir; prevLv = r.lv;
+  }
+  closeMove();
+  // texts for moves
+  let moves = 0, changes = 0, lastDir = 0, total = 0;
+  for (const st_ of steps) {
+    if (st_.kind !== "move") continue;
+    moves++; if (lastDir && st_.dir !== lastDir) changes++; lastDir = st_.dir;
+    // merge phases that are tiny steering transitions into their neighbours for readability
+    const ph = [];
+    for (const p of st_.phases) {
+      const last = ph[ph.length - 1];
+      if (last && steerText(last.delta) === steerText(p.delta)) last.len += p.len; else ph.push({ ...p });
+    }
+    const len = ph.reduce((n, p) => n + p.len, 0); total += len; st_.len = len;
+    let mn = Infinity, mnPart = "";
+    for (let k = st_.i0; k <= st_.i1; k++) if (samples[k].clr < mn) { mn = samples[k].clr; mnPart = samples[k].part; }
+    const wheel = ph.length === 1 ? `, wheel ${steerText(ph[0].delta)}` : `: ${ph.map((p, k) => `${k ? "then " : ""}${steerText(p.delta)} for ${p.len.toFixed(2)} m`).join(", ")}`;
+    const cls = mn < 0.05 ? "bad" : mn < 0.15 ? "warn" : "";
+    const minTxt = mn >= 1 ? "" : ` <span class="m">· min <span class="${cls}">${(mn * 100).toFixed(0)} cm</span>${mnPart ? " (" + mnPart + ")" : ""}</span>`;
+    st_.text = `<b>${st_.dir > 0 ? "Forward" : "Reverse"} ${len.toFixed(2)} m</b>${wheel}${minTxt}`;
+  }
+  const minAll = Math.min(...samples.map(x => x.clr));
+  PLAN.samples = samples; PLAN.steps = steps; PLAN.ends = ends; PLAN.version++;
+  PLAN.summary = `${moves} moves, ${changes} direction changes, ${fmtM(total)}, min clearance ${(minAll * 100).toFixed(0)} cm`;
+}
+function planStepsForAxis() {
+  const a = PLAN.samples;
+  return (PLAN.steps || []).map(st_ => ({ ...st_, x0: xOf(a[st_.i0]), x1: xOf(a[st_.i1]) }));
+}
+function drawPlan() {
+  if (!PLAN.samples) return;
+  const valid = planValid();
+  const a = PLAN.samples;
+  ctx.save();
+  ctx.strokeStyle = valid ? "#d6336c" : "rgba(214,51,108,.35)"; ctx.lineWidth = 2.5;
+  if (!valid) ctx.setLineDash([6, 5]);
+  ctx.beginPath(); a.forEach((p, i) => i ? ctx.lineTo(...P2(p.cx, p.cy)) : ctx.moveTo(...P2(p.cx, p.cy))); ctx.stroke();
+  ctx.setLineDash([]);
+  if (valid) {
+    ctx.strokeStyle = "rgba(214,51,108,.6)"; ctx.lineWidth = 1.2;
+    PLAN.ends.forEach((p, k) => {
+      pathPoly(partsWorld(p)[0]); ctx.stroke();
+      const c = toWorld(p, ...centerLocal());
+      label(String(k + 1), c[0], c[1], { bg: "rgba(214,51,108,.9)", color: "#fff", bold: true });
+    });
+  }
+  ctx.restore();
 }
 
 // =====================================================================
@@ -1533,6 +1981,7 @@ function drawWorld(v, data) {
   drawHeat();
   drawTrail(ghost);
   drawFoundPath();
+  drawPlan();
   drawProjection(rev, "#c7781a");
   drawProjection(fwd, "#1f9d6b");
   drawCar(colliding);
