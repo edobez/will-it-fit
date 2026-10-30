@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Garage fit simulator v3</title>
+<title>Garage fit simulator v4</title>
 <style>
   :root {
     --bg: #f4f2ee; --panel: #ffffff; --ink: #1d2128; --muted: #6b7280; --line: #e3e0da;
@@ -31,7 +31,28 @@
   .note { font-size: 12px; color: var(--muted); }
   .note kbd { display: inline-block; min-width: 18px; padding: 0 4px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: #fafaf8; color: var(--ink); font: 11px ui-monospace, monospace; text-align: center; }
   .note div { margin: 3px 0; }
-  #stage { position: relative; overflow: hidden; display: flex; flex-direction: row; }
+  #stage { position: relative; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+  #views { position: relative; flex: 1 1 0; min-height: 0; display: flex; flex-direction: row; overflow: hidden; }
+  #timeline { flex: 0 0 auto; height: 190px; background: #fff; border-top: 1px solid var(--line); display: flex; flex-direction: column; }
+  #timeline.collapsed { height: auto; }
+  #timeline.collapsed #tlcv { display: none; }
+  #tlbar { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  #tlbar button { padding: 3px 9px; font-size: 12px; }
+  #tlbar button.on { background: #dfe9f5; border-color: var(--accent); }
+  #tlbar select { width: auto; font-size: 12px; padding: 2px 4px; }
+  #tlread { margin-left: auto; font: 11.5px ui-monospace, "SF Mono", Menlo, monospace; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
+  #tlcv { flex: 1 1 0; width: 100%; min-height: 0; touch-action: none; cursor: col-resize; display: block; }
+  #card { position: absolute; top: 40px; right: 10px; width: 300px; max-height: calc(100% - 120px); overflow-y: auto; background: rgba(255,255,255,.97);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; z-index: 3; display: none; box-shadow: 0 4px 18px rgba(0,0,0,.12); }
+  #card.open { display: block; }
+  #card h3 { margin: 0 0 6px; font-size: 13px; }
+  #card ol { margin: 0; padding-left: 20px; }
+  #card li { margin: 3px 0; padding: 3px 4px; border-radius: 4px; cursor: pointer; font-size: 12.5px; }
+  #card li:hover { background: #f3f1ec; }
+  #card li.cur { background: #ece3f3; }
+  #card li .m { color: var(--muted); font-size: 11.5px; }
+  #card li .bad { color: var(--bad); }
+  #card li .warn { color: var(--warn); }
   .pane { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; }
   .pane + .pane { border-left: 2px solid #22252a; }
   .pane canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
@@ -55,7 +76,7 @@
   #pad .fine { font-size: 11px; }
   #toggle { display: none; position: absolute; bottom: 12px; left: 10px; z-index: 5; background: rgba(255,255,255,.95); }
   @media (max-aspect-ratio: 1/1) {
-    #stage { flex-direction: column; }
+    #views { flex-direction: column; }
     .pane + .pane { border-left: 0; border-top: 2px solid #22252a; }
   }
   @media (max-width: 820px) {
@@ -65,6 +86,11 @@
     #toggle { display: block; }
     #hud { font-size: 11px; min-width: 0; max-width: calc(100vw - 120px); }
     #legend { display: none; }
+    #timeline { height: 215px; }
+    #tlbar { gap: 4px; padding: 4px 6px; }
+    #tlbar button { padding: 3px 6px; }
+    #tlread { max-width: 100%; width: 100%; margin-left: 0; order: 10; }
+    #card { width: min(300px, calc(100% - 20px)); }
   }
 </style>
 </head>
@@ -72,7 +98,7 @@
 <div id="app">
   <aside id="panel">
     <h1>Garage fit simulator</h1>
-    <div class="sub">v3 · scenarios, projection modes, reachability</div>
+    <div class="sub">v4 · recording, timeline and manoeuvre steps</div>
 
     <h2>Scenario</h2>
     <div class="row sel"><label for="scenario">Scenario</label><select id="scenario"></select></div>
@@ -102,7 +128,7 @@
     <label class="chk"><input type="checkbox" id="follow"> Top view follows car</label>
     <div class="btns">
       <button id="bReset">Reset car</button>
-      <button id="bTrail">Clear trail</button>
+      <button id="bTrail">Restart recording</button>
       <button id="bFit">Fit views</button>
       <button id="bDefaults">Restore defaults</button>
     </div>
@@ -115,6 +141,8 @@
       <div><kbd>C</kbd> center wheel · <kbd>R</kbd> reset car · <kbd>F</kbd> fit views</div>
       <div><kbd>V</kbd> cycle views · <kbd>P</kbd> toggle projection mode · <kbd>H</kbd> cycle heatmap</div>
       <div><kbd>Q</kbd> <kbd>E</kbd> rotate car in place (placement only)</div>
+      <div><kbd>Space</kbd> play / pause replay · <kbd>Esc</kbd> back to live · <kbd>Enter</kbd> continue from here</div>
+      <div>Timeline: click or drag on the plot to scrub. A ghost car shows that moment; the driver view follows it.</div>
       <div>Top view: drag the car to place it, drag elsewhere to pan, scroll or pinch to zoom. Driver view: scroll or pinch to zoom; the blue "T" compass points along the target direction of the scene.</div>
     </div>
     <h2>Model notes</h2>
@@ -125,6 +153,7 @@
     </div>
   </aside>
   <main id="stage">
+   <div id="views">
     <div class="pane" id="paneTop"><canvas id="cv"></canvas><div class="ptitle">Top view · world fixed</div></div>
     <div class="pane" id="paneEgo"><canvas id="cv2"></canvas><div class="ptitle">Driver view · car fixed, heading up</div></div>
     <div id="hud"></div>
@@ -144,6 +173,22 @@
       <button data-k="back">▼</button>
       <button data-k="right">▶</button>
     </div>
+    <div id="card"><h3>Manoeuvre steps</h3><div id="cardBody"></div></div>
+   </div>
+   <div id="timeline">
+    <div id="tlbar">
+      <button id="tStart" title="Go to start">⏮</button>
+      <button id="tPlay" title="Play / pause (Space)">▶ Play</button>
+      <select id="tRate" title="Playback speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+      <select id="tAxis" title="X axis"><option value="s">Distance</option><option value="t">Time</option></select>
+      <button id="tCont" title="Put the car at the playhead and keep driving from there (Enter)">Continue from here</button>
+      <button id="tLive" title="Leave replay (Esc)">Back to live</button>
+      <button id="tCard">Steps</button>
+      <button id="tFold" title="Show or hide the plot">▾</button>
+      <span id="tlread"></span>
+    </div>
+    <canvas id="tlcv"></canvas>
+   </div>
   </main>
 </div>
 
@@ -176,7 +221,7 @@ const REACH_SCHEMA = [
 ];
 const GLOBAL_DEFAULTS = {
   mirrorsFolded: false, showCorners: true, showMirrorPaths: false, follow: false,
-  viewMode: "both", projMode: "pass", reachMode: "off", scenario: "garage",
+  viewMode: "both", projMode: "pass", reachMode: "off", scenario: "garage", tlAxis: "s",
 };
 
 const PARKED = [
@@ -580,14 +625,28 @@ function polyDistance(a, b) {
   test(a, b, false); test(b, a, true);
   return best;
 }
-function clearance(parts) {
-  let best = { d: Infinity };
-  for (const pp of parts) for (const o of S.obstacles) {
-    if (polysIntersect(pp, o.poly)) return { d: 0, p: null, q: null };
+function clearance(parts, pose) {
+  let best = { d: Infinity, pi: -1 };
+  for (let pi = 0; pi < parts.length; pi++) for (const o of S.obstacles) {
+    const pp = parts[pi];
+    if (polysIntersect(pp, o.poly)) return { d: 0, p: null, q: null, part: "contact" };
     const r = polyDistance(pp, o.poly);
-    if (r.d < best.d) best = r;
+    if (r.d < best.d) best = { ...r, pi };
   }
+  best.part = best.pi >= 0 && pose ? partLabel(best.pi, best.p, pose) : "";
   return best;
+}
+function partLabel(pi, pt, pose) {
+  if (pi === 1) return "left mirror";
+  if (pi === 2) return "right mirror";
+  const c = Math.cos(pose.th), s = Math.sin(pose.th), dx = pt[0] - pose.x, dy = pt[1] - pose.y;
+  const lx = c * dx + s * dy, ly = -s * dx + c * dy;
+  const fr = lx > D.xf - 0.35 ? "front" : lx < -D.ro + 0.35 ? "rear" : "";
+  const sd = ly > D.w2 - 0.08 ? "left" : ly < -D.w2 + 0.08 ? "right" : "";
+  if (fr && sd) return `${fr} ${sd} corner`;
+  if (fr) return fr + " bumper";
+  if (sd) return sd + " side";
+  return "body";
 }
 
 // =====================================================================
@@ -601,16 +660,8 @@ function stepPose(p, ds, delta) {
 const st = { pose: null, delta: 0, driven: 0, gearChanges: 0, lastDir: 0, trail: [], blockedT: 0, moving: false };
 function resetCar() {
   st.pose = { ...S.start };
-  st.delta = 0; st.driven = 0; st.gearChanges = 0; st.lastDir = 0; st.trail = [];
-  pushTrail(true);
-}
-function pushTrail(force) {
-  const c = toWorld(st.pose, ...centerLocal());
-  const last = st.trail[st.trail.length - 1];
-  if (force || !last || Math.hypot(c[0] - last[0], c[1] - last[1]) > 0.05) {
-    st.trail.push(c);
-    if (st.trail.length > 6000) st.trail.shift();
-  }
+  st.delta = 0; st.driven = 0; st.gearChanges = 0; st.lastDir = 0;
+  recStart();
 }
 
 // =====================================================================
@@ -631,8 +682,11 @@ window.addEventListener("keydown", e => {
   else if (e.code === "KeyV") cycle("viewMode", ["both", "top", "driver"]);
   else if (e.code === "KeyP") cycle("projMode", ["stop", "pass"]);
   else if (e.code === "KeyH") cycle("reachMode", ["off", "fwd", "rev"]);
-  else if (e.code === "KeyQ") st.pose.th += 5 * DEG;
-  else if (e.code === "KeyE") st.pose.th -= 5 * DEG;
+  else if (e.code === "KeyQ") { st.pose.th += 5 * DEG; recStart(); }
+  else if (e.code === "KeyE") { st.pose.th -= 5 * DEG; recStart(); }
+  else if (e.code === "Space") { e.preventDefault(); tlTogglePlay(); }
+  else if (e.code === "Escape") tlLive();
+  else if (e.code === "Enter") tlContinue();
 });
 window.addEventListener("keyup", e => {
   if (e.key === "Shift") input.fine = false;
@@ -661,6 +715,7 @@ function update(dt) {
   const steer = (input.left ? 1 : 0) - (input.right ? 1 : 0);
   if (steer) st.delta = clamp(st.delta + steer * P.steerRate * DEG * fine * dt, -D.dmax, D.dmax);
   const mv = (input.fwd ? 1 : 0) - (input.back ? 1 : 0);
+  if ((mv || steer) && TL.head !== null) tlLive();
   st.moving = false;
   if (mv) {
     let dist = Math.max(0, P.speed) * fine * dt;
@@ -675,7 +730,6 @@ function update(dt) {
     if (moved) {
       if (st.lastDir && st.lastDir !== mv) st.gearChanges++;
       st.lastDir = mv; st.moving = true;
-      pushTrail(false);
     }
   }
   st.blockedT = Math.max(0, st.blockedT - dt);
@@ -1083,7 +1137,7 @@ function attachPointer(v) {
   });
   const end = e => {
     pts.delete(e.pointerId);
-    if (dg && dg.mode === "car") { st.trail = []; pushTrail(true); }
+    if (dg && dg.mode === "car") recStart();
     dg = null; drag = null; cv.style.cursor = v.ego ? "default" : "grab";
   };
   cv.addEventListener("pointerup", end);
@@ -1103,7 +1157,7 @@ attachPointer(topV); attachPointer(egoV);
 // Buttons, view mode, params
 // =====================================================================
 document.getElementById("bReset").onclick = () => resetCar();
-document.getElementById("bTrail").onclick = () => { st.trail = []; pushTrail(true); };
+document.getElementById("bTrail").onclick = () => recStart();
 document.getElementById("bFit").onclick = () => { fitView(); fitEgo(); };
 document.getElementById("bDefaults").onclick = () => { setDefaults(); buildPanel(); applyViewMode(); onParamsChanged(); resetCar(); fitView(); fitEgo(); };
 document.getElementById("toggle").onclick = () => panel.classList.toggle("open");
@@ -1118,6 +1172,349 @@ function onParamsChanged() {
   save();
 }
 
+
+// =====================================================================
+// Recording: one trajectory format for user drives (and later the planner)
+// A trajectory is a list of samples along the path; segments are derived from it.
+// =====================================================================
+const REC = { samples: [], t0: 0, version: 0, wasMoving: false };
+function recSample(dir) {
+  const c = toWorld(st.pose, ...centerLocal());
+  const cl = clearance(partsWorld(st.pose), st.pose);
+  return { s: st.driven, t: (performance.now() - REC.t0) / 1000, x: st.pose.x, y: st.pose.y, th: st.pose.th,
+    delta: st.delta, dir, cx: c[0], cy: c[1], clr: cl.d, part: cl.part };
+}
+function recStart() {
+  REC.t0 = performance.now();
+  REC.samples = [recSample(0)];
+  REC.version++; REC.wasMoving = false;
+  if (typeof TL !== "undefined") { TL.head = null; TL.playing = false; }
+}
+function recFrame() {
+  const arr = REC.samples, last = arr[arr.length - 1];
+  const moved = st.driven - last.s, dsteer = Math.abs(st.delta - last.delta);
+  const stopped = REC.wasMoving && !st.moving;
+  if (moved >= 0.02 || (stopped && moved > 1e-4)) arr.push(recSample(st.lastDir));
+  else if (moved <= 1e-4 && dsteer >= 0.5 * DEG) arr.push(recSample(0));
+  else { REC.wasMoving = st.moving; return; }
+  REC.wasMoving = st.moving;
+  if (arr.length > 40000) arr.splice(1, arr.length - 40000);
+  REC.version++;
+}
+const xOf = smp => P.tlAxis === "t" ? smp.t : smp.s;
+function sampleAt(x) {
+  const a = REC.samples;
+  if (!a.length) return null;
+  let lo = 0, hi = a.length - 1;
+  if (x <= xOf(a[0])) return { ...a[0], idx: 0 };
+  if (x >= xOf(a[hi])) return { ...a[hi], idx: hi };
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (xOf(a[m]) <= x) lo = m; else hi = m; }
+  const A = a[lo], B = a[hi], span = xOf(B) - xOf(A);
+  const f = span > 1e-9 ? (x - xOf(A)) / span : 0;
+  const L = k => A[k] + (B[k] - A[k]) * f;
+  return { s: L("s"), t: L("t"), x: L("x"), y: L("y"), th: L("th"), delta: A.delta + (B.delta - A.delta) * f, dir: B.dir,
+    cx: L("cx"), cy: L("cy"), clr: Math.min(A.clr, B.clr), part: A.clr <= B.clr ? A.part : B.part, idx: lo, f };
+}
+function recountGears() {
+  let last = 0, n = 0;
+  for (const smp of REC.samples) if (smp.dir) { if (last && smp.dir !== last) n++; last = smp.dir; }
+  st.gearChanges = n; st.lastDir = last;
+}
+
+// =====================================================================
+// Timeline: replay, scrub, continue from here
+// =====================================================================
+const TL = { head: null, playing: false, rate: 1, collapsed: false, card: false };
+if (!P.tlAxis) P.tlAxis = "s";
+const recXMax = () => xOf(REC.samples[REC.samples.length - 1]);
+function tlTogglePlay() {
+  if (REC.samples.length < 2) return;
+  if (TL.playing) { TL.playing = false; return; }
+  if (TL.head === null || TL.head >= recXMax() - 1e-6) TL.head = 0;
+  TL.playing = true;
+}
+function tlLive() { TL.head = null; TL.playing = false; }
+function tlContinue() {
+  if (TL.head === null) return;
+  const g = sampleAt(TL.head);
+  const keep = REC.samples.slice(0, g.idx + 1);
+  if (xOf(g) > xOf(keep[keep.length - 1]) + 1e-9) {
+    const { idx, f, ...rest } = g; keep.push(rest);
+  }
+  REC.samples = keep;
+  st.pose = { x: g.x, y: g.y, th: g.th }; st.delta = g.delta; st.driven = g.s;
+  REC.t0 = performance.now() - g.t * 1000;
+  recountGears();
+  REC.version++;
+  tlLive();
+}
+function tlAdvance(dt) {
+  if (!TL.playing || TL.head === null) return;
+  const v = P.tlAxis === "t" ? 1 : Math.max(0.2, P.speed);
+  TL.head += dt * TL.rate * v;
+  if (TL.head >= recXMax()) { TL.head = recXMax(); TL.playing = false; }
+}
+document.getElementById("tStart").onclick = () => { if (REC.samples.length > 1) { TL.head = 0; TL.playing = false; } };
+document.getElementById("tPlay").onclick = () => tlTogglePlay();
+document.getElementById("tRate").onchange = e => { TL.rate = parseFloat(e.target.value); e.target.blur(); };
+const tAxis = document.getElementById("tAxis");
+tAxis.value = P.tlAxis;
+tAxis.onchange = () => {
+  const g = TL.head !== null ? sampleAt(TL.head) : null;
+  P.tlAxis = tAxis.value; save(); tAxis.blur();
+  if (g) TL.head = xOf(g);
+};
+document.getElementById("tCont").onclick = () => tlContinue();
+document.getElementById("tLive").onclick = () => tlLive();
+document.getElementById("tCard").onclick = () => { TL.card = !TL.card; document.getElementById("card").classList.toggle("open", TL.card); };
+document.getElementById("tFold").onclick = e => {
+  TL.collapsed = !TL.collapsed;
+  document.getElementById("timeline").classList.toggle("collapsed", TL.collapsed);
+  e.target.textContent = TL.collapsed ? "▴" : "▾";
+};
+
+// ---------- trail and ghost in the views ----------
+function drawTrail(ghost) {
+  const a = REC.samples;
+  if (a.length < 2) return;
+  ctx.save(); ctx.lineWidth = 1.5; ctx.setLineDash([2, 3]);
+  ctx.strokeStyle = "rgba(60,60,60,.45)";
+  ctx.beginPath(); a.forEach((p, i) => i ? ctx.lineTo(...P2(p.cx, p.cy)) : ctx.moveTo(...P2(p.cx, p.cy))); ctx.stroke();
+  if (ghost) {
+    ctx.setLineDash([]); ctx.lineWidth = 3; ctx.strokeStyle = "rgba(142,68,173,.55)";
+    ctx.beginPath();
+    for (let i = 0; i <= ghost.idx; i++) { const p = a[i]; i ? ctx.lineTo(...P2(p.cx, p.cy)) : ctx.moveTo(...P2(p.cx, p.cy)); }
+    ctx.lineTo(...P2(ghost.cx, ghost.cy)); ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawGhost(g) {
+  const parts = partsWorld(g);
+  ctx.save();
+  ctx.fillStyle = "rgba(142,68,173,.22)"; ctx.strokeStyle = "#8e44ad"; ctx.lineWidth = 2;
+  parts.forEach(pp => { pathPoly(pp); ctx.fill(); ctx.stroke(); });
+  const wl = 0.68, ww = 0.22, th = D.trackHalf;
+  let dl = 0, dr = 0;
+  if (Math.abs(g.delta) > 1e-6) { const R = D.wb / Math.tan(g.delta); dl = Math.atan(D.wb / (R - th)); dr = Math.atan(D.wb / (R + th)); }
+  for (const [cx, cy, ang] of [[0, th - ww / 2, 0], [0, -th + ww / 2, 0], [D.wb, th - ww / 2, dl], [D.wb, -th + ww / 2, dr]]) {
+    const c = Math.cos(ang), s = Math.sin(ang);
+    pathPoly([[-wl / 2, -ww / 2], [wl / 2, -ww / 2], [wl / 2, ww / 2], [-wl / 2, ww / 2]].map(([x, y]) => toWorld(g, cx + c * x - s * y, cy + s * x + c * y)));
+    ctx.fillStyle = "#5b2c6f"; ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ---------- plot ----------
+const tlcv = document.getElementById("tlcv"), tctx = tlcv.getContext("2d");
+const TLM = { L: 52, R: 12, T: 8, B: 18, gap: 10 };
+function steerText(d) {
+  const pct = Math.round(Math.abs(d) / D.dmax * 100);
+  if (pct < 5) return "straight";
+  const side = d > 0 ? "left" : "right";
+  return pct >= 95 ? `full lock ${side}` : `${pct}% ${side}`;
+}
+function niceStep(range, target) {
+  const raw = range / target, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  for (const m of [1, 2, 5, 10]) if (m * p >= raw) return m * p;
+  return 10 * p;
+}
+function tlGeom() {
+  const w = tlcv.clientWidth, h = tlcv.clientHeight;
+  const ph = Math.max(20, (h - TLM.T - TLM.B - TLM.gap) / 2);
+  const xmax = Math.max(recXMax(), P.tlAxis === "t" ? 5 : 1);
+  return { w, h, ph, xmax, X: v => TLM.L + v / xmax * (w - TLM.L - TLM.R), Xinv: px => (px - TLM.L) / (w - TLM.L - TLM.R) * xmax,
+    s0: TLM.T, c0: TLM.T + ph + TLM.gap };
+}
+function drawTimeline(ghost) {
+  const read = document.getElementById("tlread");
+  if (ghost) {
+    read.textContent = `@ ${fmtM(ghost.s)} · ${ghost.t.toFixed(1)} s · wheel ${steerText(ghost.delta)} · clearance ${ghost.clr >= 1 ? "> 1 m" : (ghost.clr * 100).toFixed(0) + " cm"}${ghost.part ? " (" + ghost.part + ")" : ""}`;
+  } else read.textContent = `live · recorded ${fmtM(st.driven)} · ${st.gearChanges} direction changes`;
+  document.getElementById("tPlay").textContent = TL.playing ? "❚❚ Pause" : "▶ Play";
+  document.getElementById("tPlay").classList.toggle("on", TL.playing);
+  document.getElementById("tLive").disabled = TL.head === null;
+  document.getElementById("tCont").disabled = TL.head === null;
+  if (TL.collapsed || tlcv.clientHeight === 0) return;
+  const dpr = window.devicePixelRatio || 1;
+  if (tlcv.width !== Math.round(tlcv.clientWidth * dpr) || tlcv.height !== Math.round(tlcv.clientHeight * dpr)) {
+    tlcv.width = Math.round(tlcv.clientWidth * dpr); tlcv.height = Math.round(tlcv.clientHeight * dpr);
+  }
+  const c = tctx; c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const G = tlGeom(), a = REC.samples;
+  c.clearRect(0, 0, G.w, G.h);
+  c.font = "10.5px system-ui, sans-serif"; c.textBaseline = "middle";
+  const x0 = TLM.L, x1 = G.w - TLM.R;
+  // panel frames
+  c.fillStyle = "#fafaf8";
+  c.fillRect(x0, G.s0, x1 - x0, G.ph); c.fillRect(x0, G.c0, x1 - x0, G.ph);
+  // direction bands
+  for (let i = 1; i < a.length;) {
+    const d = a[i].dir;
+    let j = i; while (j + 1 < a.length && a[j + 1].dir === d) j++;
+    if (d) {
+      c.fillStyle = d > 0 ? "rgba(31,157,107,.13)" : "rgba(199,120,26,.17)";
+      const bx0 = G.X(xOf(a[i - 1])), bx1 = G.X(xOf(a[j]));
+      c.fillRect(bx0, G.s0, Math.max(1, bx1 - bx0), G.ph); c.fillRect(bx0, G.c0, Math.max(1, bx1 - bx0), G.ph);
+    }
+    i = j + 1;
+  }
+  // steering panel
+  const sMid = G.s0 + G.ph / 2, sK = (G.ph / 2 - 4) / D.dmax, SY = d => sMid - d * sK;
+  c.strokeStyle = "rgba(0,0,0,.18)"; c.lineWidth = 1;
+  c.beginPath(); c.moveTo(x0, sMid); c.lineTo(x1, sMid); c.stroke();
+  c.setLineDash([3, 3]);
+  for (const v of [D.dmax, -D.dmax]) { c.beginPath(); c.moveTo(x0, SY(v)); c.lineTo(x1, SY(v)); c.stroke(); }
+  c.setLineDash([]);
+  c.fillStyle = "#6b7280"; c.textAlign = "right";
+  c.fillText("lock L", x0 - 5, SY(D.dmax)); c.fillText("0", x0 - 5, sMid); c.fillText("lock R", x0 - 5, SY(-D.dmax));
+  if (a.length > 1) {
+    c.strokeStyle = "#2f6fb3"; c.lineWidth = 1.8;
+    c.beginPath(); a.forEach((p, i) => i ? c.lineTo(G.X(xOf(p)), SY(p.delta)) : c.moveTo(G.X(xOf(p)), SY(p.delta))); c.stroke();
+  }
+  // clearance panel (clipped at 1 m: tight spots are what matter)
+  const CMAX = 1.0, cB = G.c0 + G.ph, CY = d => cB - Math.min(d, CMAX) / CMAX * (G.ph - 3);
+  c.strokeStyle = "rgba(207,63,63,.6)"; c.setLineDash([3, 3]);
+  c.beginPath(); c.moveTo(x0, CY(0.05)); c.lineTo(x1, CY(0.05)); c.stroke();
+  c.strokeStyle = "rgba(199,120,26,.6)";
+  c.beginPath(); c.moveTo(x0, CY(0.15)); c.lineTo(x1, CY(0.15)); c.stroke();
+  c.setLineDash([]);
+  c.fillStyle = "#6b7280";
+  c.fillText("≥1 m", x0 - 5, CY(1) + 4); c.fillText("15 cm", x0 - 5, CY(0.15)); c.fillText("0", x0 - 5, cB - 2);
+  if (a.length > 1) {
+    c.lineWidth = 1.8;
+    const cls = d => d < 0.05 ? "#cf3f3f" : d < 0.15 ? "#c7781a" : "#3a3f47";
+    for (let i = 1; i < a.length;) {
+      const col = cls(a[i].clr);
+      c.strokeStyle = col; c.beginPath(); c.moveTo(G.X(xOf(a[i - 1])), CY(a[i - 1].clr));
+      let j = i; while (j < a.length && cls(a[j].clr) === col) { c.lineTo(G.X(xOf(a[j])), CY(a[j].clr)); j++; }
+      c.stroke(); i = j;
+    }
+    // label the tightest local minima with the closest part
+    const mins = [];
+    for (let i = 0; i < a.length; i++) {
+      const v = a[i].clr; if (!(v < 0.4)) continue;
+      let isMin = true;
+      for (let k = i - 1; k >= 0 && a[i].s - a[k].s < 0.4; k--) if (a[k].clr < v) { isMin = false; break; }
+      if (isMin) for (let k = i + 1; k < a.length && a[k].s - a[i].s < 0.4; k++) if (a[k].clr <= v) { isMin = false; break; }
+      if (isMin) mins.push(i);
+    }
+    mins.sort((p, q) => a[p].clr - a[q].clr);
+    const placed = [];
+    c.textAlign = "center";
+    for (const i of mins) {
+      const px = G.X(xOf(a[i])); if (placed.some(q => Math.abs(q - px) < 90)) continue;
+      placed.push(px); if (placed.length > 6) break;
+      const py = CY(a[i].clr);
+      c.fillStyle = a[i].clr < 0.05 ? "#cf3f3f" : "#c7781a";
+      c.beginPath(); c.arc(px, py, 3, 0, Math.PI * 2); c.fill();
+      const txt = a[i].clr === 0 ? `contact` : `${(a[i].clr * 100).toFixed(0)} cm · ${a[i].part}`;
+      const tw = c.measureText(txt).width;
+      const tx = clamp(px, x0 + tw / 2 + 2, x1 - tw / 2 - 2), ty = Math.max(G.c0 + 7, py - 10);
+      c.fillStyle = "rgba(255,255,255,.85)"; c.fillRect(tx - tw / 2 - 2, ty - 6, tw + 4, 12);
+      c.fillStyle = "#1d2128"; c.fillText(txt, tx, ty);
+    }
+  } else {
+    c.fillStyle = "#6b7280"; c.textAlign = "center";
+    c.fillText("Drive to record a manoeuvre. Click or drag here afterwards to replay it.", (x0 + x1) / 2, G.s0 + G.ph);
+  }
+  // panel titles
+  c.textAlign = "left"; c.fillStyle = "#6b7280";
+  c.fillText("steering", x0 + 4, G.s0 + 8); c.fillText("clearance", x0 + 4, G.c0 + 8);
+  // x axis
+  const unit = P.tlAxis === "t" ? "s" : "m", step = niceStep(G.xmax, Math.max(3, Math.floor((x1 - x0) / 80)));
+  c.textAlign = "center"; c.fillStyle = "#6b7280"; c.strokeStyle = "rgba(0,0,0,.08)";
+  for (let v = 0; v <= G.xmax + 1e-9; v += step) {
+    const px = G.X(v);
+    c.beginPath(); c.moveTo(px, G.s0); c.lineTo(px, cB); c.stroke();
+    c.fillText(`${+v.toFixed(2)} ${unit}`, px, cB + 9);
+  }
+  // playhead
+  if (TL.head !== null) {
+    const px = G.X(TL.head);
+    c.strokeStyle = "#8e44ad"; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(px, G.s0 - 4); c.lineTo(px, cB + 2); c.stroke();
+    c.fillStyle = "#8e44ad"; c.beginPath(); c.moveTo(px - 5, G.s0 - 6); c.lineTo(px + 5, G.s0 - 6); c.lineTo(px, G.s0); c.fill();
+  }
+}
+(() => {
+  let dragging = false;
+  const scrub = e => {
+    if (REC.samples.length < 2) return;
+    const G = tlGeom();
+    TL.head = clamp(G.Xinv(e.offsetX), 0, recXMax()); TL.playing = false;
+  };
+  tlcv.addEventListener("pointerdown", e => { tlcv.setPointerCapture(e.pointerId); dragging = true; scrub(e); });
+  tlcv.addEventListener("pointermove", e => { if (dragging) scrub(e); });
+  const up = () => { dragging = false; };
+  tlcv.addEventListener("pointerup", up); tlcv.addEventListener("pointercancel", up);
+})();
+
+// =====================================================================
+// Manoeuvre card, derived from the recorded trajectory
+// =====================================================================
+let cardVersion = -1, cardSteps = [], cardEls = [];
+function buildSteps() {
+  const a = REC.samples, steps = [];
+  if (a.length < 2) return steps;
+  if (Math.abs(a[0].delta) / D.dmax >= 0.05) steps.push({ kind: "init", x0: xOf(a[0]), x1: xOf(a[0]), text: `Start with the wheel ${steerText(a[0].delta)}` });
+  for (let i = 1; i < a.length;) {
+    const d = a[i].dir;
+    let j = i; while (j + 1 < a.length && a[j + 1].dir === d) j++;
+    const A = a[i - 1], B = a[j];
+    if (d === 0) {
+      if (Math.abs(B.delta - A.delta) / D.dmax >= 0.05) steps.push({ kind: "stop", x0: xOf(A), x1: xOf(B), from: A.delta, to: B.delta });
+    } else {
+      let mn = Infinity, mnPart = "", lo = Infinity, hi = -Infinity;
+      for (let k = i - 1; k <= j; k++) {
+        if (a[k].clr < mn) { mn = a[k].clr; mnPart = a[k].part; }
+        lo = Math.min(lo, a[k].delta); hi = Math.max(hi, a[k].delta);
+      }
+      const prev = steps[steps.length - 1];
+      if (prev && prev.kind === "move" && prev.dir === d) {   // merge two moves split by a negligible stop
+        prev.len += B.s - A.s; prev.x1 = xOf(B); prev.to = B.delta; prev.lo = Math.min(prev.lo, lo); prev.hi = Math.max(prev.hi, hi);
+        if (mn < prev.mn) { prev.mn = mn; prev.mnPart = mnPart; }
+      } else steps.push({ kind: "move", dir: d, len: B.s - A.s, x0: xOf(A), x1: xOf(B), from: A.delta, to: B.delta, lo, hi, mn, mnPart });
+    }
+    i = j + 1;
+  }
+  for (const st_ of steps) {
+    if (st_.kind === "stop") st_.text = `Stop, turn the wheel to ${steerText(st_.to)}`;
+    else if (st_.kind === "move") {
+      const steady = (st_.hi - st_.lo) / D.dmax < 0.12;
+      let wheel;
+      if (steady) wheel = `wheel ${steerText((st_.lo + st_.hi) / 2)}`;
+      else {
+        const via = [st_.lo, st_.hi].find(v => Math.abs(v - st_.from) / D.dmax > 0.12 && Math.abs(v - st_.to) / D.dmax > 0.12);
+        wheel = `wheel from ${steerText(st_.from)}${via !== undefined ? " via " + steerText(via) : ""} to ${steerText(st_.to)}`;
+      }
+      const cls = st_.mn < 0.05 ? "bad" : st_.mn < 0.15 ? "warn" : "";
+      const minTxt = st_.mn >= 1 ? "" : ` <span class="m">· min <span class="${cls}">${st_.mn === 0 ? "contact" : (st_.mn * 100).toFixed(0) + " cm"}</span>${st_.mnPart && st_.mn > 0 ? " (" + st_.mnPart + ")" : ""}</span>`;
+      st_.text = `<b>${st_.dir > 0 ? "Forward" : "Reverse"} ${st_.len.toFixed(2)} m</b>, ${wheel}${minTxt}`;
+    }
+  }
+  return steps.filter(s_ => s_.kind !== "move" || s_.len >= 0.03);
+}
+function updateCard(ghost) {
+  if (!TL.card) return;
+  const body = document.getElementById("cardBody");
+  if (cardVersion !== REC.version || cardSteps.axis !== P.tlAxis) {
+    cardVersion = REC.version;
+    cardSteps = buildSteps(); cardSteps.axis = P.tlAxis;
+    const moves = cardSteps.filter(s_ => s_.kind === "move");
+    const changes = moves.reduce((n, m, i) => n + (i && m.dir !== moves[i - 1].dir ? 1 : 0), 0);
+    body.innerHTML = cardSteps.length
+      ? `<div class="note" style="margin-bottom:6px">${moves.length} moves, ${changes} direction changes, ${fmtM(moves.reduce((n, m) => n + m.len, 0))} driven. Click a step to jump there.</div><ol>${cardSteps.map(s_ => `<li>${s_.text}</li>`).join("")}</ol>`
+      : `<div class="note">Nothing recorded yet. Drive the car and the steps appear here.</div>`;
+    cardEls = [...body.querySelectorAll("li")];
+    cardEls.forEach((li, k) => li.onclick = () => { TL.head = cardSteps[k].x0; TL.playing = false; });
+  }
+  const hx = ghost ? xOf(ghost) : null;
+  cardEls.forEach((li, k) => {
+    const s_ = cardSteps[k];
+    li.classList.toggle("cur", hx !== null && hx >= s_.x0 - 1e-9 && (hx < s_.x1 || (k === cardSteps.length - 1 && hx <= s_.x1 + 1e-9)));
+  });
+}
+
 // =====================================================================
 // Main loop
 // =====================================================================
@@ -1125,14 +1522,16 @@ function drawWorld(v, data) {
   const { colliding, cl, fwd, rev } = data;
   if (v.cv.clientWidth === 0 || v.cv.clientHeight === 0) return;
   if (v.W !== v.cv.clientWidth || v.H !== v.cv.clientHeight) { resizeView(v); v.ego ? fitEgo() : fitView(); }
+  const ghost = data.ghost;
   if (v.ego) {
-    const c = toWorld(st.pose, ...centerLocal());
-    v.x = c[0]; v.y = c[1]; v.rot = Math.PI / 2 - st.pose.th;
+    const vp = ghost || st.pose;
+    const c = toWorld(vp, ...centerLocal());
+    v.x = c[0]; v.y = c[1]; v.rot = Math.PI / 2 - vp.th;
   }
   useView(v);
   drawScene();
   drawHeat();
-  if (st.trail.length > 1) { ctx.strokeStyle = "rgba(60,60,60,.45)"; ctx.lineWidth = 1.5; ctx.setLineDash([2, 3]); pathLine(st.trail); ctx.stroke(); ctx.setLineDash([]); }
+  drawTrail(ghost);
   drawFoundPath();
   drawProjection(rev, "#c7781a");
   drawProjection(fwd, "#1f9d6b");
@@ -1142,6 +1541,7 @@ function drawWorld(v, data) {
     ctx.beginPath(); ctx.moveTo(...P2(cl.p[0], cl.p[1])); ctx.lineTo(...P2(cl.q[0], cl.q[1])); ctx.stroke();
     label(`${(cl.d * 100).toFixed(0)} cm`, (cl.p[0] + cl.q[0]) / 2, (cl.p[1] + cl.q[1]) / 2, { bg: "rgba(255,255,255,.9)", bold: true, color: "#1d2128", dy: -12 });
   }
+  if (ghost) drawGhost(ghost);
   if (v.ego) drawCompass(v);
 }
 let lastT = performance.now();
@@ -1150,17 +1550,22 @@ function frame(t) {
   update(dt);
   const parts = partsWorld(st.pose);
   const colliding = collidesParts(parts);
-  const cl = clearance(parts);
+  const cl = clearance(parts, st.pose);
+  recFrame();
+  tlAdvance(dt);
+  const ghost = TL.head !== null ? sampleAt(TL.head) : null;
   const fwd = project(1, colliding), rev = project(-1, colliding);
   // reachability: restart on pose/scene change, compute only while the car is still
   const key = reachKey();
   if (key !== RE.key && !st.moving && !drag) reachRestart(key);
   else if (key !== RE.key) { RE.cells = new Map(); RE.found = null; RE.dirty = true; RE.done = true; RE.key = ""; }
   if (!st.moving) reachStep(8);
-  const data = { colliding, cl, fwd, rev };
+  const data = { colliding, cl, fwd, rev, ghost };
   drawWorld(topV, data);
   drawWorld(egoV, data);
   updateHud(colliding, cl, fwd, rev, parts);
+  drawTimeline(ghost);
+  updateCard(ghost);
   requestAnimationFrame(frame);
 }
 
